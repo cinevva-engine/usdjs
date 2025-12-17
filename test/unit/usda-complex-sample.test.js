@@ -1,0 +1,355 @@
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { UsdStage, SdfPath } from '@cinevva/usdjs';
+
+const COMPLEX_SAMPLE = `#usda 1.0
+
+(
+    customLayerData = {
+        dictionary cameraSettings = {
+            dictionary Front = {
+                double3 position = (0, 0, 50000)
+                double radius = 500
+            }
+            dictionary Perspective = {
+                double3 position = (-8.35242367356651, 1848.5404145788104, 2180.8238734887454)
+                double3 target = (-18.643985696847345, -15.400533455111145, -47.251817084273625)
+            }
+            dictionary Right = {
+                double3 position = (-50000, 0, 0)
+                double radius = 500
+            }
+            dictionary Top = {
+                double3 position = (0, 50000, 0)
+                double radius = 500
+            }
+            string boundCamera = "/OmniverseKit_Persp"
+        }
+        dictionary omni_layer = {
+            dictionary muteness = {
+            }
+        }
+        dictionary renderSettings = {
+            float3 "rtx:debugView:pixelDebug:textColor" = (0, 1e18, 0)
+            float3 "rtx:dynamicDiffuseGI:probeCounts" = (6, 6, 6)
+            float3 "rtx:dynamicDiffuseGI:probeGridOrigin" = (-210, -250, -10)
+            float3 "rtx:dynamicDiffuseGI:volumeSize" = (600, 440, 300)
+            float3 "rtx:fog:fogColor" = (0.75, 0.75, 0.75)
+            float3 "rtx:lightspeed:material:overrideAlbedo" = (0.5, 0.5, 0.5)
+            float3 "rtx:lightspeed:material:overrideEmissiveColor" = (0.5, 0.5, 0.5)
+            float3 "rtx:post:backgroundZeroAlpha:backgroundDefaultColor" = (0, 0, 0)
+            float3 "rtx:post:colorcorr:contrast" = (1, 1, 1)
+            float3 "rtx:post:colorcorr:gain" = (1, 1, 1)
+            float3 "rtx:post:colorcorr:gamma" = (1, 1, 1)
+            float3 "rtx:post:colorcorr:offset" = (0, 0, 0)
+            float3 "rtx:post:colorcorr:saturation" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:blackpoint" = (0, 0, 0)
+            float3 "rtx:post:colorgrad:contrast" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:gain" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:gamma" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:lift" = (0, 0, 0)
+            float3 "rtx:post:colorgrad:multiply" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:offset" = (0, 0, 0)
+            float3 "rtx:post:colorgrad:whitepoint" = (1, 1, 1)
+            float3 "rtx:post:lensDistortion:lensFocalLengthArray" = (10, 30, 50)
+            float3 "rtx:post:lensFlares:anisoFlareFalloffX" = (450, 475, 500)
+            float3 "rtx:post:lensFlares:anisoFlareFalloffY" = (10, 10, 10)
+            float3 "rtx:post:lensFlares:cutoffPoint" = (2, 2, 2)
+            float3 "rtx:post:lensFlares:haloFlareFalloff" = (10, 10, 10)
+            float3 "rtx:post:lensFlares:haloFlareRadius" = (75, 75, 75)
+            float3 "rtx:post:lensFlares:isotropicFlareFalloff" = (50, 50, 50)
+            float3 "rtx:post:tonemap:whitepoint" = (1, 1, 1)
+            float3 "rtx:raytracing:inscattering:singleScatteringAlbedo" = (0.9, 0.9, 0.9)
+            float3 "rtx:raytracing:inscattering:transmittanceColor" = (0.5, 0.5, 0.5)
+            token "rtx:rendermode" = "PathTracing"
+            float3 "rtx:sceneDb:ambientLightColor" = (0.1, 0.1, 0.1)
+        }
+    }
+    defaultPrim = "World"
+    endTimeCode = 100
+    metersPerUnit = 0.01
+    startTimeCode = 0
+    timeCodesPerSecond = 24
+    upAxis = "Y"
+)
+
+def Xform "World"
+{
+    def Mesh "Plane" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        float3[] extent = [(-50, 0, -50), (50, 0, 50)]
+        int[] faceVertexCounts = [4]
+        int[] faceVertexIndices = [0, 2, 3, 1]
+        rel material:binding = </World/Looks/OmniPBR> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        normal3f[] normals = [(0, 1, 0), (0, 1, 0), (0, 1, 0), (0, 1, 0)] (
+            interpolation = "faceVarying"
+        )
+        point3f[] points = [(-50, 0, -50), (50, 0, -50), (-50, 0, 50), (50, 0, 50)]
+        float2[] primvars:st = [(1, 0), (1, 1), (0, 1), (0, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform token subdivisionScheme = "none"
+        double3 xformOp:rotateXYZ = (0, 0, 0)
+        double3 xformOp:scale = (25, 1, 15)
+        double3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+    }
+
+    def Scope "Looks"
+    {
+        def Material "OmniPBR"
+        {
+            token outputs:mdl:displacement.connect = </World/Looks/OmniPBR/Shader.outputs:out>
+            token outputs:mdl:surface.connect = </World/Looks/OmniPBR/Shader.outputs:out>
+            token outputs:mdl:volume.connect = </World/Looks/OmniPBR/Shader.outputs:out>
+
+            def Shader "Shader"
+            {
+                uniform token info:implementationSource = "sourceAsset"
+                uniform asset info:mdl:sourceAsset = @OmniPBR.mdl@
+                uniform token info:mdl:sourceAsset:subIdentifier = "OmniPBR"
+                float inputs:reflection_roughness_constant = 1 (
+                    customData = {
+                        float default = 0.5
+                        dictionary range = {
+                            float max = 1
+                            float min = 0
+                        }
+                    }
+                    displayGroup = "Reflectivity"
+                    displayName = "Roughness Amount"
+                    doc = "Higher roughness values lead to more blurry reflections"
+                    hidden = false
+                )
+                token outputs:out
+            }
+        }
+    }
+
+    def Xform "ConeAngle"
+    {
+        float3 xformOp:rotateXYZ = (0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (-294.44314655849485, 0, -236.52735112988)
+        float3 xformOp:translate:pivot = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:translate:pivot", "xformOp:rotateXYZ", "xformOp:scale", "!invert!xformOp:translate:pivot"]
+
+        def SphereLight "SpotLight_01" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 90
+            float inputs:shaping:cone:softness
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (-400, 150.00552176236363, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def SphereLight "SpotLight_02" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 60
+            float inputs:shaping:cone:softness
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (271.4464062043435, 150.00552176236363, 4.831690603168681e-12)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def SphereLight "SpotLight_03" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 30
+            float inputs:shaping:cone:softness
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (920.9895093791685, 150.00552176236363, 1.1596057447604835e-11)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+    }
+
+    def Xform "ConeSoftness"
+    {
+        float3 xformOp:rotateXYZ = (0, 0, 0)
+        float3 xformOp:scale = (1, 1, 1)
+        double3 xformOp:translate = (0, 0, 406.6029480119888)
+        float3 xformOp:translate:pivot = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:translate:pivot", "xformOp:rotateXYZ", "xformOp:scale", "!invert!xformOp:translate:pivot"]
+
+        def SphereLight "SpotLight_01" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 30
+            float inputs:shaping:cone:softness
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (-400, 150.00552176236363, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def SphereLight "SpotLight_02" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 30
+            float inputs:shaping:cone:softness = 0.2
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (-100, 150.00552176236363, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def SphereLight "SpotLight_03" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 30
+            float inputs:shaping:cone:softness = 0.5
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            bool inputs:shaping:ies:normalize = 0
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (200, 150.00552176236363, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+
+        def SphereLight "SpotLight_04" (
+            prepend apiSchemas = ["ShapingAPI"]
+        )
+        {
+            float inputs:intensity = 300000
+            float inputs:radius = 20
+            float inputs:shaping:cone:angle = 30
+            float inputs:shaping:cone:softness = 0.7
+            float inputs:shaping:focus
+            color3f inputs:shaping:focusTint
+            asset inputs:shaping:ies:file
+            bool inputs:shaping:ies:normalize = 0
+            double3 xformOp:rotateXYZ = (-90, 0, 0)
+            double3 xformOp:scale = (0.5, 0.5, 0.5)
+            double3 xformOp:translate = (500, 150.00552176236363, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
+        }
+    }
+}
+`;
+
+test('complex omniverse sample: parse and verify structure', () => {
+  const stage = UsdStage.openUSDA(COMPLEX_SAMPLE, '<test>');
+  const layer = stage.rootLayer;
+
+  // Check layer metadata
+  assert.strictEqual(layer.metadata?.defaultPrim, 'World');
+  assert.strictEqual(layer.metadata?.metersPerUnit, 0.01);
+  assert.strictEqual(layer.metadata?.upAxis, 'Y');
+  assert.strictEqual(layer.metadata?.startTimeCode, 0);
+  assert.strictEqual(layer.metadata?.endTimeCode, 100);
+  assert.strictEqual(layer.metadata?.timeCodesPerSecond, 24);
+
+  // Check customLayerData exists
+  const customLayerData = layer.metadata?.customLayerData;
+  assert.ok(customLayerData, 'customLayerData should exist');
+  assert.strictEqual(customLayerData?.type, 'dict');
+
+  // Check root prim exists
+  const world = layer.getPrim(SdfPath.parse('/World'));
+  assert.ok(world, 'World prim should exist');
+  assert.strictEqual(world.typeName, 'Xform');
+
+  // Check Mesh prim
+  const plane = layer.getPrim(SdfPath.parse('/World/Plane'));
+  assert.ok(plane, 'Plane mesh should exist');
+  assert.strictEqual(plane.typeName, 'Mesh');
+
+  // Check material relationship
+  const materialBinding = plane.properties?.get('material:binding');
+  assert.ok(materialBinding, 'material:binding should exist');
+  assert.strictEqual(materialBinding.defaultValue?.type, 'sdfpath');
+
+  // Check nested prims
+  const looks = layer.getPrim(SdfPath.parse('/World/Looks'));
+  assert.ok(looks, 'Looks scope should exist');
+  assert.strictEqual(looks.typeName, 'Scope');
+
+  const omniPBR = layer.getPrim(SdfPath.parse('/World/Looks/OmniPBR'));
+  assert.ok(omniPBR, 'OmniPBR material should exist');
+  assert.strictEqual(omniPBR.typeName, 'Material');
+
+  // Check lights
+  const spotLight = layer.getPrim(SdfPath.parse('/World/ConeAngle/SpotLight_01'));
+  assert.ok(spotLight, 'SpotLight_01 should exist');
+  assert.strictEqual(spotLight.typeName, 'SphereLight');
+
+  // Check prim metadata (prepend apiSchemas)
+  const planeMetadata = plane.metadata;
+  console.log('Plane metadata keys:', Object.keys(planeMetadata || {}));
+  
+  // Check property declarations without values
+  const coneSoftness = spotLight.properties?.get('inputs:shaping:cone:softness');
+  console.log('cone:softness property:', coneSoftness ? 'exists' : 'missing');
+  // Property without value should still be created
+  assert.ok(coneSoftness, 'Property without value should still be created');
+  
+  // Check property metadata
+  const shader = layer.getPrim(SdfPath.parse('/World/Looks/OmniPBR/Shader'));
+  assert.ok(shader, 'Shader should exist');
+  const roughnessProp = shader.properties?.get('inputs:reflection_roughness_constant');
+  assert.ok(roughnessProp, 'reflection_roughness_constant should exist');
+  const roughnessMeta = roughnessProp.metadata;
+  console.log('Roughness property metadata keys:', Object.keys(roughnessMeta || {}));
+  assert.ok(roughnessMeta?.customData, 'customData metadata should exist');
+  
+  // Check xformOpOrder with special tokens
+  const coneAngleXform = layer.getPrim(SdfPath.parse('/World/ConeAngle'));
+  assert.ok(coneAngleXform, 'ConeAngle Xform should exist');
+  const xformOpOrder = coneAngleXform.properties?.get('xformOpOrder');
+  assert.ok(xformOpOrder, 'xformOpOrder should exist');
+  assert.strictEqual(xformOpOrder.defaultValue?.type, 'array');
+  const orderArray = xformOpOrder.defaultValue?.value || [];
+  console.log('xformOpOrder values:', orderArray.map((v) => typeof v === 'string' ? v : JSON.stringify(v)));
+  // Check if special token is preserved
+  const hasInvert = orderArray.some((v) => typeof v === 'string' && v.includes('!invert!'));
+  console.log('Has !invert! token:', hasInvert);
+
+  console.log('✓ Complex sample parsed successfully');
+  console.log(`  Prims: ${stage.listPrimPaths().length}`);
+  console.log(`  Root layer metadata keys: ${Object.keys(layer.metadata || {}).length}`);
+});
+

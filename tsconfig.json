@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "lib": [
+            "ES2022",
+            "DOM",
+            "WebWorker"
+        ],
+        "moduleResolution": "Bundler",
+        "strict": true,
+        "skipLibCheck": true,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "verbatimModuleSyntax": true
+    },
+    "include": [
+        "src/**/*"
+    ]
+}

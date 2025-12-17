@@ -1,0 +1,11 @@
+{
+    "version": 1,
+    "sources": [
+        {
+            "name": "ft-lab-sample-usd",
+            "kind": "zip",
+            "zipUrl": "https://github.com/ft-lab/sample_usd/archive/refs/heads/main.zip",
+            "extractSubdir": "sample_usd-main"
+        }
+    ]
+}

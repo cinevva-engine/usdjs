@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "source": "usd-wg/assets",
+  "description": "USD Working Group official test and full assets organized by category",
+  "categories": {
+    "test_assets": {
+      "description": "Unit test assets with documentation and reference screenshots",
+      "subcategories": {
+        "_common": {
+          "description": "Shared test utilities",
+          "files": [
+            "test_assets/_common/animated_cube_translation.usda",
+            "test_assets/_common/axis.usda",
+            "test_assets/_common/teapot.usda"
+          ]
+        },
+        "schemaTests_primitives": {
+          "description": "UsdGeom primitive shape tests",
+          "files": [
+            "test_assets/schemaTests/usdGeom/primitives/all_primitives.usda",
+            "test_assets/schemaTests/usdGeom/primitives/capsule.usda",
+            "test_assets/schemaTests/usdGeom/primitives/cone.usda",
+            "test_assets/schemaTests/usdGeom/primitives/cube.usda",
+            "test_assets/schemaTests/usdGeom/primitives/cylinder.usda",
+            "test_assets/schemaTests/usdGeom/primitives/sphere.usda"
+          ]
+        },
+        "schemaTests_transforms": {
+          "description": "Transform hierarchy tests",
+          "files": [
+            "test_assets/schemaTests/usdGeom/transforms/complex_transform.usda",
+            "test_assets/schemaTests/usdGeom/transforms/matrix_transform.usda",
+            "test_assets/schemaTests/usdGeom/transforms/scopes_and_xforms_nested.usda",
+            "test_assets/schemaTests/usdGeom/transforms/simple_transform.usda",
+            "test_assets/schemaTests/usdGeom/transforms/weird_matrix_transform.usda",
+            "test_assets/schemaTests/usdGeom/transforms/xforms_nested.usda"
+          ]
+        },
+        "schemaTests_meshes": {
+          "description": "Mesh geometry tests",
+          "files": [
+            "test_assets/schemaTests/usdGeom/meshes/5_face/5_face.usda",
+            "test_assets/schemaTests/usdGeom/meshes/doubleSided/doubleSided_quad.usda",
+            "test_assets/schemaTests/usdGeom/meshes/empty_mesh/empty.usda",
+            "test_assets/schemaTests/usdGeom/meshes/mixed_faceVertexCounts/mixed.usda",
+            "test_assets/schemaTests/usdGeom/meshes/normals_types/normalsTypes.usda",
+            "test_assets/schemaTests/usdGeom/meshes/points_types/pointsTypes.usda",
+            "test_assets/schemaTests/usdGeom/meshes/quad_mesh/quads.usda",
+            "test_assets/schemaTests/usdGeom/meshes/singleSided/singleSided.usda",
+            "test_assets/schemaTests/usdGeom/meshes/subdiv_bilinear/subdiv_bilinear.usda",
+            "test_assets/schemaTests/usdGeom/meshes/subdiv_catmullClark/subdiv_catmullClark.usda",
+            "test_assets/schemaTests/usdGeom/meshes/subdiv_loop_quads/subdiv_loop_quads.usda",
+            "test_assets/schemaTests/usdGeom/meshes/subdiv_loop_triangles/subdiv_loop_triangles.usda",
+            "test_assets/schemaTests/usdGeom/meshes/subdiv_none/subdiv_none.usda",
+            "test_assets/schemaTests/usdGeom/meshes/triangled_mesh/triangles.usda"
+          ]
+        },
+        "schemaTests_extent": {
+          "description": "Bounding box extent tests",
+          "files": [
+            "test_assets/schemaTests/usdGeom/extent/inverse_extent.usda",
+            "test_assets/schemaTests/usdGeom/extent/no_extent.usda",
+            "test_assets/schemaTests/usdGeom/extent/regular_extent.usda",
+            "test_assets/schemaTests/usdGeom/extent/scaled_extent.usda",
+            "test_assets/schemaTests/usdGeom/extent/zero_extent.usda"
+          ]
+        },
+        "foundation_composition": {
+          "description": "Stage composition tests (sublayers, references, payloads, inherits)",
+          "files": [
+            "test_assets/foundation/stage_composition/_parent_stage.usda",
+            "test_assets/foundation/stage_composition/active.usda",
+            "test_assets/foundation/stage_composition/class_inherit.usda",
+            "test_assets/foundation/stage_composition/inherit_and_specialize.usda",
+            "test_assets/foundation/stage_composition/over.usda",
+            "test_assets/foundation/stage_composition/purpose.usda",
+            "test_assets/foundation/stage_composition/subLayer/_stage.usda",
+            "test_assets/foundation/stage_composition/subLayer/sublayer_child_folder.usda",
+            "test_assets/foundation/stage_composition/subLayer/sublayer_parent_folder.usda",
+            "test_assets/foundation/stage_composition/subLayer/sublayer_same_folder.usda",
+            "test_assets/foundation/stage_composition/references/_stage.usda",
+            "test_assets/foundation/stage_composition/references/reference_child_folder.usda",
+            "test_assets/foundation/stage_composition/references/reference_parent_folder.usda",
+            "test_assets/foundation/stage_composition/references/reference_same_folder.usda",
+            "test_assets/foundation/stage_composition/references_prim/_stage.usda",
+            "test_assets/foundation/stage_composition/references_prim/reference_prim_in_other_file.usda",
+            "test_assets/foundation/stage_composition/references_prim/reference_prim_in_same_file.usda",
+            "test_assets/foundation/stage_composition/payload/_stage.usda",
+            "test_assets/foundation/stage_composition/payload/payload_child_folder.usda",
+            "test_assets/foundation/stage_composition/payload/payload_parent_folder.usda",
+            "test_assets/foundation/stage_composition/payload/payload_same_folder.usda"
+          ]
+        },
+        "foundation_configuration": {
+          "description": "Stage configuration tests (upAxis, metersPerUnit, time)",
+          "files": [
+            "test_assets/foundation/stage_configuration/upAxis/upAxis_X.usda",
+            "test_assets/foundation/stage_configuration/upAxis/upAxis_Y.usda",
+            "test_assets/foundation/stage_configuration/upAxis/upAxis_Z.usda",
+            "test_assets/foundation/stage_configuration/metersPerUnit/metersPerUnit_1.usda",
+            "test_assets/foundation/stage_configuration/metersPerUnit/metersPerUnit_10.usda",
+            "test_assets/foundation/stage_configuration/metersPerUnit/metersPerUnit_mix.usda",
+            "test_assets/foundation/stage_configuration/framesPerSecond/framesPerSecond_1.usda",
+            "test_assets/foundation/stage_configuration/framesPerSecond/framesPerSecond_24.usda",
+            "test_assets/foundation/stage_configuration/framesPerSecond/framesPerSecond_48.usda",
+            "test_assets/foundation/stage_configuration/framesPerSecond/framesPerSecond_100.usda",
+            "test_assets/foundation/stage_configuration/timeCodesPerSecond/timeCodesPerSecond_1.usda",
+            "test_assets/foundation/stage_configuration/timeCodesPerSecond/timeCodesPerSecond_24.usda",
+            "test_assets/foundation/stage_configuration/timeCodesPerSecond/timeCodesPerSecond_48.usda",
+            "test_assets/foundation/stage_configuration/start_end_timeCode/start_end_timeCodes_subset.usda",
+            "test_assets/foundation/stage_configuration/start_end_timeCode/start_end_timeCodes_superset.usda",
+            "test_assets/foundation/stage_configuration/multiple_root_prims/multiple_root_prims_with_defaultPrim.usda"
+          ]
+        },
+        "materials": {
+          "description": "Material and texture tests",
+          "files": [
+            "test_assets/MaterialXTest/basic.usda",
+            "test_assets/MaterialXTest/basic_flatten.usda",
+            "test_assets/MaterialXTest/basicTextured.usda",
+            "test_assets/MaterialXTest/basicTextured_flatten.usda",
+            "test_assets/NormalsTextureBiasAndScale/NormalsTextureBiasAndScale.usda",
+            "test_assets/TextureCoordinateTest/TextureCoordinateTest.usda",
+            "test_assets/TextureCoordinateTest/TextureCoordinateTestMaterialX.usda",
+            "test_assets/TextureFileFormatTests/all_files.usda",
+            "test_assets/TextureFileFormatTests/jpeg_rgb_8-bit.usda",
+            "test_assets/TextureFileFormatTests/png_rgb_8-bit.usda"
+          ]
+        },
+        "blending": {
+          "description": "Alpha blending tests",
+          "files": [
+            "test_assets/AlphaBlendSortTest/AlphaBlendSortTest.usda"
+          ]
+        },
+        "references_relationships": {
+          "description": "Reference and relationship encapsulation tests",
+          "files": [
+            "test_assets/References/OverridingReferencedInternalReferencesTest.usda",
+            "test_assets/References/utils/Environment.usda",
+            "test_assets/RelationshipEncapsulationTests/ExternalReferenceBadTargetTest.usda",
+            "test_assets/RelationshipEncapsulationTests/InternalReferenceTest.usda",
+            "test_assets/RelationshipEncapsulationTests/SublayeredInternalReferenceTest.usda",
+            "test_assets/RelationshipEncapsulationTests/ReferencedAssembliesWithInternalReferencesTest.usda"
+          ]
+        }
+      }
+    },
+    "full_assets": {
+      "description": "Production-like example assets",
+      "subcategories": {
+        "McUsd": {
+          "description": "McDonald's-themed USD scene",
+          "files": [
+            "full_assets/McUsd/McUsd.usda",
+            "full_assets/McUsd/McUsd_10cm.usda"
+          ]
+        },
+        "ElephantWithMonochord": {
+          "description": "Animated elephant with musical instrument",
+          "files": [
+            "full_assets/ElephantWithMonochord/SoC-ElephantWithMonochord_thumbnail.usda"
+          ]
+        },
+        "SubdivisionSurfaces": {
+          "description": "Subdivision surface examples",
+          "files": [
+            "full_assets/SubdivisionSurfaces/Creases_SpinningPyramids.usda",
+            "full_assets/SubdivisionSurfaces/Pyramid/Pyramid.usd",
+            "full_assets/SubdivisionSurfaces/Pyramid/geo.usda",
+            "full_assets/SubdivisionSurfaces/Pyramid/mtl.usda",
+            "full_assets/SubdivisionSurfaces/Pyramid/payload.usda"
+          ]
+        },
+        "OpenChessSet": {
+          "description": "Full chess set with pieces",
+          "files": [
+            "full_assets/OpenChessSet/chess_set.usda",
+            "full_assets/OpenChessSet/assets/Bishop/Bishop.usd",
+            "full_assets/OpenChessSet/assets/King/King.usd",
+            "full_assets/OpenChessSet/assets/Knight/Knight.usd",
+            "full_assets/OpenChessSet/assets/Pawn/Pawn.usd",
+            "full_assets/OpenChessSet/assets/Queen/Queen.usd",
+            "full_assets/OpenChessSet/assets/Rook/Rook.usd",
+            "full_assets/OpenChessSet/assets/Chessboard/Chessboard.usd"
+          ]
+        },
+        "Teapot": {
+          "description": "Utah teapot with materials and payloads",
+          "files": [
+            "full_assets/Teapot/Teapot.usd",
+            "full_assets/Teapot/Teapot_Geometry.usd",
+            "full_assets/Teapot/Teapot_Materials.usd",
+            "full_assets/Teapot/Teapot_Payload.usd",
+            "full_assets/Teapot/DrawModes.usd"
+          ]
+        },
+        "StandardShaderBall": {
+          "description": "Industry-standard shader ball scene",
+          "files": [
+            "full_assets/StandardShaderBall/standard_shader_ball_scene.usda",
+            "full_assets/StandardShaderBall/layers/camera.usda",
+            "full_assets/StandardShaderBall/layers/environment.usda",
+            "full_assets/StandardShaderBall/layers/example_materials.usda",
+            "full_assets/StandardShaderBall/layers/shaderball.usda",
+            "full_assets/StandardShaderBall/material_surface_geo/subdiv.usda",
+            "full_assets/StandardShaderBall/material_surface_geo/triangulated.usda"
+          ]
+        },
+        "Vehicles": {
+          "description": "Mini car kit with variants",
+          "files": [
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/vehicles/vehicleVariants.usda",
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/vehicles/ambulance/asset/ambulanceFullAsset.usda",
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/vehicles/formula/asset/formulaFullAsset.usda",
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/vehicles/sedan/asset/sedanFullAsset.usda",
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/vehicles/tractor/asset/tractorFullAsset.usda",
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/vehicles/van/asset/vanFullAsset.usda",
+            "full_assets/Vehicles/USD_Mini_Car_Kit/assets/wheels/wheelVariants.usda"
+          ]
+        }
+      }
+    },
+    "docs": {
+      "description": "Documentation and educational assets",
+      "files": [
+        "docs/PrimvarInterpolation/primvar_interpolation.usda",
+        "docs/CompositionPuzzles/PayloadAndReference/problem/shot.usda",
+        "docs/CompositionPuzzles/PayloadAndReference/solution/shot.usda",
+        "docs/CompositionPuzzles/VariantSetAndLocal1/puzzle_1.usda",
+        "docs/CompositionPuzzles/VariantSetAndLocal2/puzzle_2.usda",
+        "docs/CompositionPuzzles/VariantSetAndLocal3/puzzle_3.usda"
+      ]
+    },
+    "intent_vfx": {
+      "description": "VFX pipeline example assets",
+      "files": [
+        "intent-vfx/assets/teapot/teapot.usd",
+        "intent-vfx/assets/teapot/teapot_animCycle.usd",
+        "intent-vfx/assets/simpleAsset/simpleAsset.usd",
+        "intent-vfx/scenes/teapotScene.usd",
+        "intent-vfx/scenes/teapotScene_animCycle.usd",
+        "intent-vfx/scenes/teapotScene_camera.usd",
+        "intent-vfx/scenes/teapotScene_layout.usd",
+        "intent-vfx/scenes/simpleAssetScene.usd"
+      ]
+    }
+  },
+  "referenceImages": {
+    "thumbnails": "*/thumbnails/*.png",
+    "screenshots": "*/screenshots/*_usdrecord_22.08.png",
+    "cards": "*/cards/*_{XPos,XNeg,YPos,YNeg,ZPos,ZNeg}.png"
+  },
+  "generatedAt": "2025-12-16T00:00:00.000Z"
+}
