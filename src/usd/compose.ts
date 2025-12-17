@@ -9,8 +9,11 @@ import { SdfPath } from '../sdf/path.js';
  * - `def` creates, `over` modifies if exists (or creates a placeholder)
  * - no payload/reference arcs yet (those will change the layer stack itself)
  */
-export function composeLayerStack(layersWeakToStrong: SdfLayer[]): SdfLayer {
-    const composed = new SdfLayer('<composed>');
+export function composeLayerStack(layersWeakToStrong: SdfLayer[], identifier = '<composed>'): SdfLayer {
+    // Important: the composed layer identifier participates in relative asset resolution.
+    // Callers should pass through a stable identifier (usually the strongest layer's identifier)
+    // when composing subLayers, otherwise relative paths like `./mtl.usd` will resolve incorrectly.
+    const composed = new SdfLayer(identifier);
 
     // Merge in order: weakest → strongest.
     for (const layer of layersWeakToStrong) {

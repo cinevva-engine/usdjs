@@ -6,9 +6,17 @@ export type SdfValue =
     | number
     | string
     | { type: 'token'; value: string }
-    | { type: 'asset'; value: string }
+    // Allow extra fields so we can attach origin info during parsing (e.g. `__fromIdentifier`)
+    | { type: 'asset'; value: string; [k: string]: any }
     | { type: 'sdfpath'; value: string }
-    | { type: 'reference'; assetPath: string; targetPath: string }
+    /**
+     * Reference/payload arc value.
+     *
+     * - `@file.usd@` (no targetPath)
+     * - `@file.usd@</Prim>` (targetPath)
+     * - optional arg list: `@file.usd@ (offset = 2, scale = 1)` (represented as extra fields)
+     */
+    | { type: 'reference'; assetPath: string; targetPath?: string; [k: string]: any }
     | { type: 'vec2f' | 'vec3f' | 'vec4f'; value: number[] }
     | { type: 'matrix4d'; value: number[] }
     | { type: 'tuple'; value: SdfValue[] }

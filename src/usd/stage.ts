@@ -3,7 +3,7 @@ import { SdfPath } from '../sdf/path.js';
 import { parseUsdaToLayer } from '../usda/parser.js';
 import { parseMaterialXToLayer, isMaterialXContent } from '../materialx/parser.js';
 import { composeLayerStack, mergePrimSpec, mergePrimSpecWeakIntoStrong } from './compose.js';
-import { type UsdResolver } from './resolver.js';
+import { resolveAssetPath, type UsdResolver } from './resolver.js';
 
 /**
  * Parse text content to an SdfLayer, auto-detecting format (USDA or MaterialX XML).
@@ -69,7 +69,8 @@ export class UsdStage {
         // subLayers are authored as weakest -> strongest.
         // Our layerStack is [root, subLayer0, subLayer1, ...], so weakToStrong is [...sublayers, root].
         const weakToStrong = [...this.layerStack.slice(1), this.rootLayer];
-        return composeLayerStack(weakToStrong);
+        // Preserve a stable identifier for correct relative path resolution during later arc expansion.
+        return composeLayerStack(weakToStrong, this.rootLayer.identifier);
     }
 
     /**
@@ -82,7 +83,76 @@ export class UsdStage {
      * This grafts the referenced/payloaded layer's defaultPrim (or first root child) into the target prim.
      */
     async composePrimIndexWithResolver(resolver: UsdResolver): Promise<SdfLayer> {
+        // Cache parsed (and arc-expanded) layers by identifier. Real-world scenes (like the teapot grid)
+        // can reference the same asset dozens of times; without caching, we repeatedly parse/expand the
+        // same files and the viewer can appear to hang.
+        const layerCache = new Map<string, SdfLayer>();
+        const expandedLayerIds = new Set<string>();
         const composed = this.composePrimIndex();
+        const protoPathByKey = new Map<string, string>();
+        let protoCounter = 0;
+
+        /**
+         * Read+parse a layer with aggressive caching keyed by the *resolved identifier*.
+         *
+         * Why: `resolver.readText()` typically does both resolution and I/O (fetch/fs). Even if we cache the parsed
+         * `SdfLayer`, calling `readText()` repeatedly for the same `(assetPath, fromIdentifier)` can flood the browser
+         * with network requests (appearing "stuck") for heavily-instanced scenes like the teapot grid.
+         */
+        const readLayerCached = async (assetPath: string, fromIdentifier: string): Promise<SdfLayer> => {
+            const resolvedGuess = resolveAssetPath(assetPath, fromIdentifier);
+            const cachedGuess = layerCache.get(resolvedGuess);
+            if (cachedGuess) return cachedGuess;
+
+            const { identifier: id, text } = await resolver.readText(assetPath, fromIdentifier);
+            const cached = layerCache.get(id);
+            if (cached) {
+                // Also alias by our resolved guess (helps when resolver normalizes differently).
+                if (!layerCache.has(resolvedGuess)) layerCache.set(resolvedGuess, cached);
+                return cached;
+            }
+            const layer = parseTextToLayer(text, id);
+            layerCache.set(id, layer);
+            if (!layerCache.has(resolvedGuess)) layerCache.set(resolvedGuess, layer);
+            return layer;
+        };
+
+        const ensurePathParents = (l: SdfLayer, primPath: string): void => {
+            const parts = primPath.split('/').filter(Boolean);
+            if (parts.length <= 1) return;
+            for (let i = 0; i < parts.length - 1; i++) {
+                const p = '/' + parts.slice(0, i + 1).join('/');
+                l.ensurePrim(SdfPath.parse(p), 'def');
+            }
+        };
+
+        const attachPrimAtPath = (l: SdfLayer, prim: SdfPrimSpec): void => {
+            const p = prim.path.primPath;
+            if (p === '/' || !p.startsWith('/')) return;
+            ensurePathParents(l, p);
+            const parts = p.split('/').filter(Boolean);
+            let cur = l.root;
+            for (let i = 0; i < parts.length; i++) {
+                const name = parts[i]!;
+                if (!cur.children) cur.children = new Map();
+                if (i === parts.length - 1) {
+                    cur.children.set(name, prim);
+                    return;
+                }
+                let next = cur.children.get(name);
+                if (!next) {
+                    next = l.ensurePrim(SdfPath.parse('/' + parts.slice(0, i + 1).join('/')), 'def');
+                    cur.children.set(name, next);
+                }
+                cur = next;
+            }
+        };
+
+        const isInstanceablePrim = (p: SdfPrimSpec): boolean => {
+            const md = p.metadata ?? {};
+            const v = (md as any).instanceable;
+            return v === true || (typeof v === 'number' && v !== 0);
+        };
 
         // Phase 1: Apply variant selections FIRST so variant children become part of the composed layer.
         // This is needed because variant prims may have references that need expansion.
@@ -92,6 +162,8 @@ export class UsdStage {
         // Important for stages like `Teapot/DrawModes.usd` which uses `append references = </World/SomePrim>`
         // to create drawMode duplicates inside the same layer.
         applyInternalReferences(composed);
+        // Apply inherits within the composed layer (common for animation cycles and class-based authoring).
+        applyInherits(composed);
         // Internal references may bring in new variant sets that need processing.
         applyVariantSelections(composed);
 
@@ -104,14 +176,52 @@ export class UsdStage {
             const dstPrim = composed.getPrim(p);
             if (!dstPrim) continue;
 
+            // Accumulate arcs separately so later (stronger) arcs can override earlier (weaker) arcs,
+            // while still keeping authored opinions on `dstPrim` strongest.
+            const arcAccum: SdfPrimSpec = {
+                path: SdfPath.parse(dstPrim.path.primPath),
+                specifier: 'def',
+                metadata: {},
+                properties: new Map(),
+                children: new Map(),
+            };
+
             // Apply arcs in weak->strong order across layerStack opinions.
             const arcOps = this.collectArcOpsForPrim(p);
             for (const op of arcOps) {
-                const { identifier: refId, text } = await resolver.readText(op.assetPath, op.fromIdentifier);
-                const layer = parseTextToLayer(text, refId);
+                // Prototype instancing: if this prim is instanceable and has an external reference,
+                // don't graft the whole asset into every instance. Instead, materialize one prototype
+                // under `/__usdjs_prototypes/...` and convert the instance's references metadata to an
+                // internal sdfpath reference. The viewer can render these efficiently.
+                if (op.kind === 'references' && isInstanceablePrim(dstPrim)) {
+                    const isExternalRef = typeof op.assetPath === 'string' && op.assetPath.length > 0 && !op.assetPath.startsWith('/');
+                    if (isExternalRef) {
+                        const k = `${op.assetPath}|${op.targetPath ?? ''}|${op.fromIdentifier}`;
+                        let protoPath = protoPathByKey.get(k);
+                        if (!protoPath) {
+                            protoCounter++;
+                            protoPath = `/__usdjs_prototypes/p${protoCounter}`;
+                            protoPathByKey.set(k, protoPath);
+
+                            const layer = await readLayerCached(op.assetPath, op.fromIdentifier);
+                            await expandArcsInLayer(layer, resolver, undefined, layerCache, expandedLayerIds);
+                            const srcPrim = pickSourcePrim(layer, op.targetPath);
+                            if (srcPrim) {
+                                const protoPrim = clonePrimWithRemappedPaths(srcPrim, protoPath, srcPrim.path.primPath);
+                                attachPrimAtPath(composed, protoPrim);
+                            }
+                        }
+
+                        dstPrim.metadata ??= {};
+                        (dstPrim.metadata as any).references = { type: 'sdfpath', value: protoPath };
+                        continue;
+                    }
+                }
+
+                const layer = await readLayerCached(op.assetPath, op.fromIdentifier);
                 // Recursively expand arcs inside the loaded layer (payload-of-payload, reference chains, etc.).
                 // This is required for samples like `simple_mesh_sphere_payload_nest.usda`.
-                await expandArcsInLayer(layer, resolver);
+                await expandArcsInLayer(layer, resolver, undefined, layerCache, expandedLayerIds);
                 // Use targetPath if specified (e.g., @file@</Path>), otherwise use defaultPrim
                 const srcPrim = pickSourcePrim(layer, op.targetPath);
                 if (!srcPrim) continue;
@@ -119,29 +229,74 @@ export class UsdStage {
                 // This keeps imported prims under `dstPrim` (instead of "hoisting" them to their original /World paths)
                 // and remaps embedded SdfPaths (e.g. material bindings, shader connects) accordingly.
                 const grafted = clonePrimWithRemappedPaths(srcPrim, dstPrim.path.primPath, srcPrim.path.primPath);
-                mergePrimSpec(dstPrim, grafted);
+                // Compose arcs among themselves (weak->strong). We'll merge into dstPrim at the end as weak opinions.
+                mergePrimSpec(arcAccum, grafted);
             }
 
             // Also check for arcs directly on the composed prim's metadata.
             // This handles prims that came from variant selection (their refs won't be found in the layerStack).
             const composedArcOps = collectArcOpsFromPrimMetadata(dstPrim, composed.identifier);
             for (const op of composedArcOps) {
-                const { identifier: refId, text } = await resolver.readText(op.assetPath, op.fromIdentifier);
-                const layer = parseTextToLayer(text, refId);
-                await expandArcsInLayer(layer, resolver);
+                if (op.kind === 'references' && isInstanceablePrim(dstPrim)) {
+                    const isExternalRef = typeof op.assetPath === 'string' && op.assetPath.length > 0 && !op.assetPath.startsWith('/');
+                    if (isExternalRef) {
+                        const k = `${op.assetPath}|${op.targetPath ?? ''}|${op.fromIdentifier}`;
+                        let protoPath = protoPathByKey.get(k);
+                        if (!protoPath) {
+                            protoCounter++;
+                            protoPath = `/__usdjs_prototypes/p${protoCounter}`;
+                            protoPathByKey.set(k, protoPath);
+
+                            const layer = await readLayerCached(op.assetPath, op.fromIdentifier);
+                            await expandArcsInLayer(layer, resolver, undefined, layerCache, expandedLayerIds);
+                            const srcPrim = pickSourcePrim(layer, op.targetPath);
+                            if (srcPrim) {
+                                const protoPrim = clonePrimWithRemappedPaths(srcPrim, protoPath, srcPrim.path.primPath);
+                                attachPrimAtPath(composed, protoPrim);
+                            }
+                        }
+
+                        dstPrim.metadata ??= {};
+                        (dstPrim.metadata as any).references = { type: 'sdfpath', value: protoPath };
+                        continue;
+                    }
+                }
+
+                const layer = await readLayerCached(op.assetPath, op.fromIdentifier);
+                await expandArcsInLayer(layer, resolver, undefined, layerCache, expandedLayerIds);
                 // Use targetPath if specified (e.g., @file@</Path>), otherwise use defaultPrim
                 const srcPrim = pickSourcePrim(layer, op.targetPath);
                 if (!srcPrim) continue;
                 const grafted = clonePrimWithRemappedPaths(srcPrim, dstPrim.path.primPath, srcPrim.path.primPath);
-                // Referenced/payloaded prim opinions should be WEAKER than the referencing prim.
-                // Keep existing opinions on dstPrim (e.g. `variants = {...}` selections) and only fill missing data.
-                mergePrimSpecWeakIntoStrong(dstPrim, grafted);
+                // Compose arcs among themselves (weak->strong). We'll merge into dstPrim at the end as weak opinions.
+                mergePrimSpec(arcAccum, grafted);
             }
+
+            // Finally apply the composed arc opinions as WEAK, so authored opinions on dstPrim remain strongest.
+            mergePrimSpecWeakIntoStrong(dstPrim, arcAccum);
         }
+
+        // Inherits often targets classes that themselves reference/payload external content (e.g. teapot animCycle).
+        // Apply after arc expansion so inherited prims carry the expanded opinions.
+        applyInherits(composed);
 
         // Phase 3: Apply variant selections AGAIN after arc expansion.
         // Variant content may come from referenced/payloaded layers (e.g. geo.usda with mesh inside variants).
         applyVariantSelections(composed);
+        // Variant selection can also introduce internal references (common pattern for duplicating subtrees,
+        // e.g. multiple wheels referencing a single wheel asset prim). Re-apply internal references at the end
+        // so those authored `</Prim>` refs get resolved into real children/geometry.
+        applyInternalReferences(composed);
+        applyVariantSelections(composed);
+
+        // Phase 4: Variant selection can introduce NEW external arcs (references/payloads) inside the selected
+        // variant content (e.g. wheelVariants.usda defines wheelBlackAsset as a def with a reference to an asset file).
+        // Our earlier arc expansion pass couldn't see those prims because they didn't exist until variants were applied.
+        // Run a final in-layer arc expansion pass to graft those assets in.
+        // IMPORTANT: Use rootLayer identifier for subLayer resolution, not '<composed>' which breaks relative paths
+        await expandArcsInLayer(composed, resolver, this.rootLayer.identifier, layerCache, expandedLayerIds);
+        // And apply inherits one last time in case variant/arc expansion introduced new inherited class opinions.
+        applyInherits(composed);
 
         return composed;
     }
@@ -154,8 +309,8 @@ export class UsdStage {
             if (!prim || !prim.metadata) continue;
             const refs = extractArcRefs(prim.metadata.references);
             const pays = extractArcRefs(prim.metadata.payload);
-            for (const a of refs) ops.push({ kind: 'references', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: layer.identifier });
-            for (const a of pays) ops.push({ kind: 'payload', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: layer.identifier });
+            for (const a of refs) ops.push({ kind: 'references', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: a.fromIdentifier ?? layer.identifier });
+            for (const a of pays) ops.push({ kind: 'payload', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: a.fromIdentifier ?? layer.identifier });
         }
         return ops;
     }
@@ -211,7 +366,7 @@ type ArcOp = { kind: 'references' | 'payload'; assetPath: string; targetPath?: s
 /**
  * Represents an extracted arc reference with optional target path.
  */
-type ExtractedArc = { assetPath: string; targetPath?: string };
+type ExtractedArc = { assetPath: string; targetPath?: string; fromIdentifier?: string };
 
 /**
  * Collect arc ops directly from a prim's metadata.
@@ -223,8 +378,8 @@ function collectArcOpsFromPrimMetadata(prim: SdfPrimSpec, fromIdentifier: string
     if (!prim.metadata) return ops;
     const refs = extractArcRefs(prim.metadata.references);
     const pays = extractArcRefs(prim.metadata.payload);
-    for (const a of refs) ops.push({ kind: 'references', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier });
-    for (const a of pays) ops.push({ kind: 'payload', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier });
+    for (const a of refs) ops.push({ kind: 'references', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: a.fromIdentifier ?? fromIdentifier });
+    for (const a of pays) ops.push({ kind: 'payload', assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: a.fromIdentifier ?? fromIdentifier });
     return ops;
 }
 
@@ -234,12 +389,28 @@ function collectArcOpsFromPrimMetadata(prim: SdfPrimSpec, fromIdentifier: string
  */
 function extractArcRefs(v: SdfValue | undefined): ExtractedArc[] {
     if (!v) return [];
-    if (typeof v === 'object' && v.type === 'asset') return [{ assetPath: v.value }];
-    if (typeof v === 'object' && v.type === 'reference') return [{ assetPath: v.assetPath, targetPath: v.targetPath }];
+    if (typeof v === 'object' && v.type === 'asset') {
+        const fromIdentifier = typeof (v as any).__fromIdentifier === 'string' ? (v as any).__fromIdentifier : undefined;
+        return [{ assetPath: v.value, fromIdentifier }];
+    }
+    if (typeof v === 'object' && v.type === 'reference') {
+        const fromIdentifier = typeof (v as any).__fromIdentifier === 'string' ? (v as any).__fromIdentifier : undefined;
+        return [{
+            assetPath: v.assetPath,
+            targetPath: typeof (v as any).targetPath === 'string' ? (v as any).targetPath : undefined,
+            fromIdentifier
+        }];
+    }
     if (typeof v === 'object' && v.type === 'array') {
         return v.value.flatMap((x) => {
-            if (x && typeof x === 'object' && x.type === 'asset') return [{ assetPath: x.value }];
-            if (x && typeof x === 'object' && x.type === 'reference') return [{ assetPath: x.assetPath, targetPath: x.targetPath }];
+            if (x && typeof x === 'object' && x.type === 'asset') {
+                const fromIdentifier = typeof (x as any).__fromIdentifier === 'string' ? (x as any).__fromIdentifier : undefined;
+                return [{ assetPath: x.value, fromIdentifier }];
+            }
+            if (x && typeof x === 'object' && x.type === 'reference') {
+                const fromIdentifier = typeof (x as any).__fromIdentifier === 'string' ? (x as any).__fromIdentifier : undefined;
+                return [{ assetPath: x.assetPath, targetPath: typeof (x as any).targetPath === 'string' ? (x as any).targetPath : undefined, fromIdentifier }];
+            }
             return [];
         });
     }
@@ -262,22 +433,35 @@ function extractArcAssetPaths(v: SdfValue | undefined): string[] {
  */
 function extractInternalRefPaths(v: SdfValue | undefined): string[] {
     if (!v) return [];
-    if (typeof v === 'object' && v.type === 'sdfpath') return [v.value];
+    const normalizeInternalPath = (p: string): string => {
+        // Internal references in USDA are commonly written as `</Prim/Path>` (angle-bracketed).
+        // Our SdfPath parser expects plain `/Prim/Path`, so strip wrappers.
+        if (p.startsWith('<') && p.endsWith('>')) return p.slice(1, -1);
+        return p;
+    };
+
+    if (typeof v === 'object' && v.type === 'sdfpath') return [normalizeInternalPath(v.value)];
     // Internal references can also come through our parser as "reference" objects with an empty assetPath
     // and a targetPath pointing at a prim in the same layer, e.g. `append references = </World/Foo>`.
     if (typeof v === 'object' && v.type === 'reference') {
         const ap = (v as any).assetPath;
         const tp = (v as any).targetPath;
-        if ((!ap || ap === '') && typeof tp === 'string' && tp.startsWith('/')) return [tp];
+        if ((!ap || ap === '') && typeof tp === 'string') {
+            const norm = normalizeInternalPath(tp);
+            if (norm.startsWith('/')) return [norm];
+        }
     }
     if (typeof v === 'object' && v.type === 'array') {
         return v.value.flatMap((x) => {
             if (!x || typeof x !== 'object') return [];
-            if ((x as any).type === 'sdfpath') return [(x as any).value];
+            if ((x as any).type === 'sdfpath') return [normalizeInternalPath((x as any).value)];
             if ((x as any).type === 'reference') {
                 const ap = (x as any).assetPath;
                 const tp = (x as any).targetPath;
-                if ((!ap || ap === '') && typeof tp === 'string' && tp.startsWith('/')) return [tp];
+                if ((!ap || ap === '') && typeof tp === 'string') {
+                    const norm = normalizeInternalPath(tp);
+                    if (norm.startsWith('/')) return [norm];
+                }
             }
             return [];
         });
@@ -408,7 +592,15 @@ function clonePrimWithRemappedPaths(src: SdfPrimSpec, dstPrimPath: string, srcRo
     return clone(src, dstPrimPath);
 }
 
-async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promise<void> {
+async function expandArcsInLayer(
+    layer: SdfLayer,
+    resolver: UsdResolver,
+    baseIdentifierForSubLayers?: string,
+    layerCache?: Map<string, SdfLayer>,
+    expandedLayerIds?: Set<string>
+): Promise<void> {
+    // If the caller provided a cross-call cache, skip layers we've already fully expanded.
+    if (expandedLayerIds?.has(layer.identifier)) return;
     // Expand arcs (references/payload) authored inside `layer` itself.
     // Unlike `UsdStage.collectArcOpsForPrim` (which consults the stage's layerStack),
     // this handles nested arcs inside referenced/payloaded layers.
@@ -417,7 +609,53 @@ async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promis
     const subLayersApplied = new Set<string>(); // guard per layer identifier (avoid re-composing same layer)
     const debug = false;
 
-    const walk = async (curLayer: SdfLayer): Promise<void> => {
+    // Prototype instancing support for `instanceable = true` + external references.
+    // We materialize the referenced asset once under `/__usdjs_prototypes/...` and convert instance prims
+    // to internal references to that prototype. The viewer already knows how to render instanceable prims
+    // with internal sdfpath references without fully expanding them.
+    const prototypePathByKey: Map<string, string> =
+        ((layer as any).__usdjsPrototypePathByKey ??= new Map<string, string>());
+    let prototypeCounter = ((layer as any).__usdjsPrototypeCounter ??= 0) as number;
+
+    const ensurePathParents = (l: SdfLayer, primPath: string): void => {
+        const parts = primPath.split('/').filter(Boolean);
+        if (parts.length <= 1) return;
+        // ensure all parents exist as placeholders
+        for (let i = 0; i < parts.length - 1; i++) {
+            const p = '/' + parts.slice(0, i + 1).join('/');
+            l.ensurePrim(SdfPath.parse(p), 'def');
+        }
+    };
+
+    const attachPrimAtPath = (l: SdfLayer, prim: SdfPrimSpec): void => {
+        const p = prim.path.primPath;
+        if (p === '/' || !p.startsWith('/')) return;
+        ensurePathParents(l, p);
+        const parts = p.split('/').filter(Boolean);
+        let cur = l.root;
+        for (let i = 0; i < parts.length; i++) {
+            const name = parts[i]!;
+            if (!cur.children) cur.children = new Map();
+            if (i === parts.length - 1) {
+                cur.children.set(name, prim);
+                return;
+            }
+            let next = cur.children.get(name);
+            if (!next) {
+                next = l.ensurePrim(SdfPath.parse('/' + parts.slice(0, i + 1).join('/')), 'def');
+                cur.children.set(name, next);
+            }
+            cur = next;
+        }
+    };
+
+    const isInstanceablePrim = (p: SdfPrimSpec): boolean => {
+        const md = p.metadata ?? {};
+        const v = (md as any).instanceable;
+        return v === true || (typeof v === 'number' && v !== 0);
+    };
+
+    const walk = async (curLayer: SdfLayer, baseId?: string): Promise<void> => {
         if (inProgress.has(curLayer.identifier)) return; // prevent cycles A -> B -> A
         inProgress.add(curLayer.identifier);
 
@@ -433,14 +671,25 @@ async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promis
                     );
                 }
                 const subLayers: SdfLayer[] = [];
+                // Use baseId for composed layers (which have identifier '<composed>'), otherwise use curLayer.identifier
+                const resolveId = (baseId && curLayer.identifier === '<composed>') ? baseId : curLayer.identifier;
                 for (const subPath of subLayerAssetPaths) {
-                    const { identifier: subId, text: subText } = await resolver.readText(subPath, curLayer.identifier);
-                    const subLayer = parseTextToLayer(subText, subId);
-                    await walk(subLayer);
+                    const resolvedGuess = resolveAssetPath(subPath, resolveId);
+                    let subLayer = layerCache?.get(resolvedGuess);
+                    if (!subLayer) {
+                        const { identifier: subId, text: subText } = await resolver.readText(subPath, resolveId);
+                        subLayer = layerCache?.get(subId);
+                        if (!subLayer) {
+                            subLayer = parseTextToLayer(subText, subId);
+                            layerCache?.set(subId, subLayer);
+                        }
+                        if (!layerCache?.has(resolvedGuess)) layerCache?.set(resolvedGuess, subLayer);
+                    }
+                    await walk(subLayer, baseId);
                     subLayers.push(subLayer);
                 }
 
-                const composed = composeLayerStack([...subLayers, curLayer]);
+                const composed = composeLayerStack([...subLayers, curLayer], curLayer.identifier);
 
                 // Overwrite `curLayer` in-place so outer callers still hold the same object reference.
                 // Note: `SdfLayer.root` and `SdfLayer.metadata` are readonly references, but their contents are mutable.
@@ -463,6 +712,8 @@ async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promis
         // This must happen before external arc expansion since internal refs may bring in content
         // that has external references or variant sets.
         applyInternalReferences(curLayer);
+        // Inherits can also bring in additional authored opinions that include arcs/variants.
+        applyInherits(curLayer);
 
         // Apply variant selections again after internal references are resolved.
         applyVariantSelections(curLayer);
@@ -474,13 +725,31 @@ async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promis
             const dstPrim = curLayer.getPrim(p);
             if (!dstPrim || !dstPrim.metadata) continue;
 
+            // Accumulate arcs separately so later (stronger) arcs can override earlier (weaker) arcs,
+            // while keeping authored opinions on dstPrim strongest.
+            let arcAccum: SdfPrimSpec | null = null;
+            const ensureArcAccum = (): SdfPrimSpec => {
+                if (arcAccum) return arcAccum;
+                arcAccum = {
+                    path: SdfPath.parse(dstPrim.path.primPath),
+                    specifier: 'def',
+                    metadata: {},
+                    properties: new Map(),
+                    children: new Map(),
+                };
+                return arcAccum;
+            };
+
             const refs = extractArcRefs(dstPrim.metadata.references);
             const pays = extractArcRefs(dstPrim.metadata.payload);
 
+            // For composed layers, use the provided baseId for relative resolution instead of '<composed>'.
+            const layerResolveId = (baseId && curLayer.identifier === '<composed>') ? baseId : curLayer.identifier;
+
             // Apply references first, then payloads (matches common authoring expectations for these samples).
-            const all: Array<{ kind: 'references' | 'payload'; assetPath: string; targetPath?: string }> = [
-                ...refs.map((a) => ({ kind: 'references' as const, assetPath: a.assetPath, targetPath: a.targetPath })),
-                ...pays.map((a) => ({ kind: 'payload' as const, assetPath: a.assetPath, targetPath: a.targetPath })),
+            const all: Array<{ kind: 'references' | 'payload'; assetPath: string; targetPath?: string; fromIdentifier: string }> = [
+                ...refs.map((a) => ({ kind: 'references' as const, assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: a.fromIdentifier ?? layerResolveId })),
+                ...pays.map((a) => ({ kind: 'payload' as const, assetPath: a.assetPath, targetPath: a.targetPath, fromIdentifier: a.fromIdentifier ?? layerResolveId })),
             ];
 
             for (const op of all) {
@@ -488,26 +757,90 @@ async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promis
                 if (applied.has(key)) continue;
                 applied.add(key);
 
-                const { identifier: childId, text } = await resolver.readText(op.assetPath, curLayer.identifier);
-                let childLayer = parseTextToLayer(text, childId);
+                // Persistently guard against re-expanding the same arc on the same prim.
+                // We call expandArcsInLayer multiple times across composition phases; without a per-prim marker,
+                // the same `references/payload` can be grafted repeatedly (exploding work / appearing like an infinite loop).
+                const expanded: Set<string> = ((dstPrim as any).__usdjsExpandedArcs ??= new Set<string>());
+                const expandedKey = `${op.kind}|${op.assetPath}|${op.targetPath ?? ''}|${op.fromIdentifier}`;
+                if (expanded.has(expandedKey)) continue;
+                expanded.add(expandedKey);
+
+                // If this is an instanceable prim with an external reference, convert to prototype + internal reference.
+                // This avoids grafting the full teapot subtree thousands of times (which can freeze the browser).
+                if (op.kind === 'references' && isInstanceablePrim(dstPrim)) {
+                    const isExternalRef = typeof op.assetPath === 'string' && op.assetPath.length > 0 && !op.assetPath.startsWith('/');
+                    if (isExternalRef) {
+                        const protoKey = `${op.assetPath}|${op.targetPath ?? ''}|${op.fromIdentifier}`;
+                        let protoPath = prototypePathByKey.get(protoKey);
+                        if (!protoPath) {
+                            prototypeCounter++;
+                            (layer as any).__usdjsPrototypeCounter = prototypeCounter;
+                            protoPath = `/__usdjs_prototypes/p${prototypeCounter}`;
+                            prototypePathByKey.set(protoKey, protoPath);
+
+                            const { identifier: childId, text } = await resolver.readText(op.assetPath, op.fromIdentifier);
+                            let childLayer = layerCache?.get(childId);
+                            if (!childLayer) {
+                                childLayer = parseTextToLayer(text, childId);
+                                layerCache?.set(childId, childLayer);
+                            }
+                            await walk(childLayer, baseId);
+
+                            const srcPrim = pickSourcePrim(childLayer, op.targetPath);
+                            if (srcPrim) {
+                                const protoPrim = clonePrimWithRemappedPaths(srcPrim, protoPath, srcPrim.path.primPath);
+                                attachPrimAtPath(curLayer, protoPrim);
+                            }
+                        }
+
+                        // Point this prim at the prototype via internal sdfpath reference so the viewer can render it.
+                        dstPrim.metadata ??= {};
+                        (dstPrim.metadata as any).references = { type: 'sdfpath', value: protoPath };
+                        // Keep instanceable flag as-is. Do NOT graft anything into this prim.
+                        continue;
+                    }
+                }
+
+                const resolvedGuess = resolveAssetPath(op.assetPath, op.fromIdentifier);
+                let childLayer = layerCache?.get(resolvedGuess);
+                if (!childLayer) {
+                    const { identifier: childId, text } = await resolver.readText(op.assetPath, op.fromIdentifier);
+                    childLayer = layerCache?.get(childId);
+                    if (!childLayer) {
+                        childLayer = parseTextToLayer(text, childId);
+                        layerCache?.set(childId, childLayer);
+                    }
+                    if (!layerCache?.has(resolvedGuess)) layerCache?.set(resolvedGuess, childLayer);
+                }
 
                 // Handle sublayers in the child layer (e.g., payload file that references geom/look sublayers)
                 const childSubLayers = extractSubLayerAssetPaths(childLayer.metadata?.subLayers);
                 if (childSubLayers.length > 0) {
                     const subLayerStack: SdfLayer[] = [];
+                    const childIdentifier = childLayer.identifier;
                     for (const subPath of childSubLayers) {
-                        const { identifier: subId, text: subText } = await resolver.readText(subPath, childId);
-                        const subLayer = parseTextToLayer(subText, subId);
+                        const resolvedGuess2 = resolveAssetPath(subPath, childIdentifier);
+                        let subLayer = layerCache?.get(resolvedGuess2);
+                        if (!subLayer) {
+                            const { identifier: subId, text: subText } = await resolver.readText(subPath, childIdentifier);
+                            subLayer = layerCache?.get(subId);
+                            if (!subLayer) {
+                                subLayer = parseTextToLayer(subText, subId);
+                                layerCache?.set(subId, subLayer);
+                            }
+                            if (!layerCache?.has(resolvedGuess2)) layerCache?.set(resolvedGuess2, subLayer);
+                        }
                         // Recursively expand arcs in each sublayer
-                        await walk(subLayer);
+                        await walk(subLayer, baseId);
                         subLayerStack.push(subLayer);
                     }
                     // Compose sublayers (weak to strong) then childLayer on top (strongest)
-                    childLayer = composeLayerStack([...subLayerStack, childLayer]);
+                    // Preserve the child's identifier so relative subLayer refs keep resolving correctly.
+                    childLayer = composeLayerStack([...subLayerStack, childLayer], childLayer.identifier);
                 }
 
                 // Recursively expand arcs in the child layer before grafting it in.
-                await walk(childLayer);
+                await walk(childLayer, baseId);
 
                 // Use targetPath if specified (e.g., @file@</Path>), otherwise use defaultPrim
                 const srcPrim = pickSourcePrim(childLayer, op.targetPath);
@@ -521,17 +854,29 @@ async function expandArcsInLayer(layer: SdfLayer, resolver: UsdResolver): Promis
                 }
                 if (!srcPrim) continue;
                 const grafted = clonePrimWithRemappedPaths(srcPrim, dstPrim.path.primPath, srcPrim.path.primPath);
-                mergePrimSpec(dstPrim, grafted);
+                // Compose arcs among themselves (weak->strong). We'll merge into dstPrim after all ops.
+                mergePrimSpec(ensureArcAccum(), grafted);
             }
+
+            // Apply accumulated arc opinions (weak) so authored opinions on dstPrim remain strongest.
+            if (arcAccum) mergePrimSpecWeakIntoStrong(dstPrim, arcAccum);
         }
 
+        // Apply inherits after arc expansion so classes that reference/payload external layers contribute real opinions.
+        applyInherits(curLayer);
+
         // Apply variant selections AGAIN after arc expansion to handle variants from loaded layers.
+        applyVariantSelections(curLayer);
+        // Variants inside referenced/payloaded layers can introduce additional internal references.
+        // Apply internal refs again so those subtrees become visible in the composed result.
+        applyInternalReferences(curLayer);
         applyVariantSelections(curLayer);
 
         inProgress.delete(curLayer.identifier);
     };
 
-    await walk(layer);
+    await walk(layer, baseIdentifierForSubLayers);
+    expandedLayerIds?.add(layer.identifier);
 }
 
 /**
@@ -559,6 +904,35 @@ function applyInternalReferences(layer: SdfLayer): void {
     }
 }
 
+/**
+ * Apply inherits (class-based authoring) within a layer.
+ *
+ * Example (common in usd-wg-assets teapot):
+ *   over "SomePrim" ( prepend inherits = </SomeClass> ) { }
+ *
+ * In USD, inherits brings in opinions from the class prim. We treat inherited opinions as WEAK
+ * relative to opinions authored on the inheriting prim.
+ */
+function applyInherits(layer: SdfLayer): void {
+    const prims = listPrimSpecs(layer.root);
+    for (const prim of prims) {
+        if (!prim.metadata) continue;
+        const inheritPaths = extractInternalRefPaths((prim.metadata as any).inherits);
+        if (inheritPaths.length === 0) continue;
+        // With USD's prepend semantics, the FIRST item in the list has HIGHEST priority.
+        // Apply weaker inherits first, then stronger ones on top, so iterate in REVERSE order.
+        const inheritsInComposeOrder = [...inheritPaths].reverse();
+        for (const inheritPath of inheritsInComposeOrder) {
+            const srcPrim = layer.getPrim(SdfPath.parse(inheritPath));
+            if (!srcPrim) continue;
+            // Clone with path remapping: class opinions should apply as-if authored on the inheriting prim.
+            const grafted = clonePrimWithRemappedPaths(srcPrim, prim.path.primPath, srcPrim.path.primPath);
+            // Inherited opinions are weaker than the inheriting prim's authored opinions.
+            mergePrimSpecWeakIntoStrong(prim, grafted);
+        }
+    }
+}
+
 function applyVariantSelections(layer: SdfLayer): void {
     // Keep applying until no more changes occur (handles nested variants).
     // A variant may add new variantSets that need processing.
@@ -578,8 +952,8 @@ function applyVariantSelections(layer: SdfLayer): void {
                 const variantName =
                     typeof selection === 'string'
                         ? selection
-                        : selection && typeof selection === 'object' && selection.type === 'token'
-                            ? selection.value
+                        : selection && typeof selection === 'object' && (selection.type === 'token' || selection.type === 'string')
+                            ? (selection as any).value
                             : null;
                 if (!variantName) continue;
 

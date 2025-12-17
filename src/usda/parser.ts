@@ -42,7 +42,18 @@ class Parser {
     parseLayer(): void {
         // Skip optional header like `#usda 1.0` which the lexer treats as comment.
         // Parse optional top-level metadata block `( ... )` into layer.metadata.
-        while (this.isPunct('(')) this.parseMetadataBlockInto(this.layer.metadata);
+        // Safety: limit iterations to prevent infinite loops from malformed input
+        let metadataBlockCount = 0;
+        while (this.isPunct('(') && metadataBlockCount < 100) {
+            const offsetBefore = this.tok.offset;
+            this.parseMetadataBlockInto(this.layer.metadata);
+            // Safety check: ensure token advanced (if it didn't, we'd loop forever)
+            if (this.tok.offset === offsetBefore && this.isPunct('(')) {
+                this.next(); // Force advance to prevent infinite loop
+                break;
+            }
+            metadataBlockCount++;
+        }
 
         // Parse prims until EOF
         while (!this.isKind('eof')) {
@@ -227,12 +238,21 @@ class Parser {
             const assetPath = this.tok.value;
             this.next();
             // Check for optional target prim path: @file@</Target/Path>
+            // Note: references/payloads can also have an arg list after them, e.g.
+            // `@file.usd@</Prim> (offset = 2, scale = 1)` (SdfLayerOffset).
             if (this.isKind('sdfpath')) {
                 const targetPath = this.tok.value;
                 this.next();
-                return { type: 'reference', assetPath, targetPath };
+                const args = this.isPunct('(') ? this.parseParenArgList() : null;
+                const base: any = { type: 'reference', assetPath, targetPath, __fromIdentifier: this.layer.identifier };
+                return args ? { ...base, ...args } : base;
             }
-            return { type: 'asset', value: assetPath };
+            const args = this.isPunct('(') ? this.parseParenArgList() : null;
+            // If an arg list follows an asset path, treat it as a (non-targeted) reference-style object.
+            // This is important inside metadata blocks where listOps like `prepend references = @file@ (offset=...)`
+            // are common in real-world USD (and in the usd-wg-assets corpus).
+            if (args) return { type: 'reference', assetPath, __fromIdentifier: this.layer.identifier, ...args } as any;
+            return { type: 'asset', value: assetPath, __fromIdentifier: this.layer.identifier } as any;
         }
 
         if (this.isKind('sdfpath')) {
@@ -325,6 +345,39 @@ class Parser {
             this.next();
         }
         this.expectPunct(')', 'Expected ")" to close metadata block');
+    }
+
+    /**
+     * Parse a simple parenthesized argument list used in USD for reference/payload layer offsets:
+     * `(..., offset = <number>, scale = <number>, ...)`
+     *
+     * This is NOT the same as a tuple value. It behaves like a mini metadata block attached to a value.
+     */
+    private parseParenArgList(): Record<string, SdfValue> {
+        const out: Record<string, SdfValue> = {};
+        this.expectPunct('(', 'Expected "(" to open arg list');
+        while (!this.isKind('eof') && !this.isPunct(')')) {
+            if (this.isPunct(',') || this.isPunct(';')) {
+                this.next();
+                continue;
+            }
+            if (this.tok.kind === 'identifier') {
+                const key = this.tok.value;
+                this.next();
+                if (this.isPunct('=')) {
+                    this.next();
+                    out[key] = this.parseValue();
+                    continue;
+                }
+                // Bare identifier: treat as token-ish true flag
+                out[key] = { type: 'token', value: key };
+                continue;
+            }
+            // Skip unrecognized token to avoid infinite loops
+            this.next();
+        }
+        this.expectPunct(')', 'Expected ")" to close arg list');
+        return out;
     }
 
     private parseVariantSetInto(targetPrim: SdfPrimSpec, primPath: SdfPath): void {

@@ -36,7 +36,7 @@ def Xform "World" {
     assert.equal(cube.properties.get('size').defaultValue, 1);
     assert.equal(cube.properties.get('visible').defaultValue, true);
     assert.deepEqual(cube.properties.get('kind').defaultValue, { type: 'token', value: 'component' });
-    assert.deepEqual(cube.properties.get('tex').defaultValue, { type: 'asset', value: 'textures/albedo.png' });
+    assert.deepEqual(cube.properties.get('tex').defaultValue, { type: 'asset', value: 'textures/albedo.png', __fromIdentifier: '<memory>' });
 
     assert.equal(cube.properties.get('faceVertexCounts').typeName, 'int[]');
     assert.deepEqual(cube.properties.get('faceVertexCounts').defaultValue, {
