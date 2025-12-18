@@ -1,5 +1,52 @@
-import { SdfLayer, type SdfPrimSpec } from '../sdf/layer.js';
+import { SdfLayer, type SdfPrimSpec, type SdfPropertySpec } from '../sdf/layer.js';
 import { SdfPath } from '../sdf/path.js';
+
+function mergePropertySpecStrongOverWeak(dst: SdfPropertySpec, src: SdfPropertySpec): void {
+    // `src` is stronger than `dst`.
+    // - typeName: treat as a strong opinion (overwrite)
+    if (src.typeName) dst.typeName = src.typeName;
+    // - defaultValue: overwrite if authored on src
+    if (src.defaultValue !== undefined) dst.defaultValue = src.defaultValue;
+    // - timeSamples: if src authors any, union with src winning per time key
+    if (src.timeSamples && src.timeSamples.size > 0) {
+        if (!dst.timeSamples || dst.timeSamples.size === 0) {
+            dst.timeSamples = src.timeSamples;
+        } else {
+            const merged = new Map<number, any>();
+            for (const [t, v] of dst.timeSamples.entries()) merged.set(t, v);
+            for (const [t, v] of src.timeSamples.entries()) merged.set(t, v);
+            dst.timeSamples = merged;
+        }
+    }
+    // - metadata: strong wins per key
+    if (src.metadata) {
+        dst.metadata ??= {};
+        for (const [k, v] of Object.entries(src.metadata)) (dst.metadata as any)[k] = v;
+    }
+}
+
+function mergePropertySpecWeakIntoStrong(dstStrong: SdfPropertySpec, srcWeak: SdfPropertySpec): void {
+    // `srcWeak` is weaker than `dstStrong`.
+    if ((!dstStrong.typeName || dstStrong.typeName === 'unknown') && srcWeak.typeName) dstStrong.typeName = srcWeak.typeName;
+    if (dstStrong.defaultValue === undefined && srcWeak.defaultValue !== undefined) dstStrong.defaultValue = srcWeak.defaultValue;
+
+    if (srcWeak.timeSamples && srcWeak.timeSamples.size > 0) {
+        if (!dstStrong.timeSamples || dstStrong.timeSamples.size === 0) {
+            dstStrong.timeSamples = srcWeak.timeSamples;
+        } else {
+            for (const [t, v] of srcWeak.timeSamples.entries()) {
+                if (!dstStrong.timeSamples.has(t)) dstStrong.timeSamples.set(t, v);
+            }
+        }
+    }
+
+    if (srcWeak.metadata) {
+        dstStrong.metadata ??= {};
+        for (const [k, v] of Object.entries(srcWeak.metadata)) {
+            if (!(k in dstStrong.metadata)) (dstStrong.metadata as any)[k] = v;
+        }
+    }
+}
 
 /**
  * Pcp-lite composition: build a composed prim index by stacking layers.
@@ -39,10 +86,18 @@ export function mergePrimSpec(dstPrim: SdfPrimSpec, srcPrim: SdfPrimSpec): void 
         }
     }
 
-    // properties: stronger wins by key
+    // properties: merge per-property so stronger opinions don't accidentally drop weaker fields
+    // like `timeSamples` when only some fields are overridden.
     if (srcPrim.properties) {
         dstPrim.properties ??= new Map();
-        for (const [k, v] of srcPrim.properties.entries()) dstPrim.properties.set(k, v);
+        for (const [k, srcProp] of srcPrim.properties.entries()) {
+            const dstProp = dstPrim.properties.get(k);
+            if (!dstProp) {
+                dstPrim.properties.set(k, srcProp);
+                continue;
+            }
+            mergePropertySpecStrongOverWeak(dstProp, srcProp);
+        }
     }
 
     // variantSets: merge by set name; variants inside set merge by variant name.
@@ -106,11 +161,17 @@ export function mergePrimSpecWeakIntoStrong(dstStrong: SdfPrimSpec, srcWeak: Sdf
         }
     }
 
-    // properties: fill only missing keys on strong
+    // properties: fill missing keys; if property exists on strong, fill missing fields
+    // (notably `timeSamples`) without overwriting stronger values.
     if (srcWeak.properties) {
         dstStrong.properties ??= new Map();
-        for (const [k, v] of srcWeak.properties.entries()) {
-            if (!dstStrong.properties.has(k)) dstStrong.properties.set(k, v);
+        for (const [k, srcProp] of srcWeak.properties.entries()) {
+            const dstProp = dstStrong.properties.get(k);
+            if (!dstProp) {
+                dstStrong.properties.set(k, srcProp);
+                continue;
+            }
+            mergePropertySpecWeakIntoStrong(dstProp, srcProp);
         }
     }
 
