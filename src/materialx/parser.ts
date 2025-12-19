@@ -63,8 +63,31 @@ export function parseMaterialXToLayer(src: string, opts: MaterialXParseOptions =
         return layer;
     }
     
-    // Get fileprefix for texture paths
-    const fileprefix = materialxEl.getAttribute('fileprefix') || '';
+    // Get fileprefix for texture paths.
+    //
+    // MaterialX often authors texture filenames relative to the .mtlx file location (e.g. `tex/foo.jpg`).
+    // The XML `fileprefix` attribute is optional and many assets omit it (including usd-wg-assets OpenChessSet).
+    //
+    // When we have a real identifier, we can treat its directory as an implicit fileprefix so that
+    // texture paths can be resolved without needing extra context later.
+    const xmlFileprefix = materialxEl.getAttribute('fileprefix') || '';
+    const inferDirPrefix = (): string => {
+        const id = opts.identifier ?? '';
+        // Expect posix-style identifiers in this repo (USD uses forward slashes).
+        const slash = id.lastIndexOf('/');
+        if (slash < 0) return '';
+        return id.substring(0, slash + 1); // include trailing slash
+    };
+    const baseDirPrefix = inferDirPrefix();
+    let fileprefix = xmlFileprefix || '';
+    if (fileprefix && baseDirPrefix) {
+        // If the XML fileprefix is relative, anchor it to the mtlx directory.
+        if (!fileprefix.startsWith('/') && !fileprefix.startsWith('./') && !fileprefix.match(/^[a-z]+:\/\//i)) {
+            fileprefix = baseDirPrefix + fileprefix;
+        }
+    } else if (!fileprefix && baseDirPrefix) {
+        fileprefix = baseDirPrefix;
+    }
     
     // Collect all nodes by name for reference resolution
     const nodesByName = new Map<string, MaterialXNode>();
