@@ -97,8 +97,7 @@ export class UsdaLexer {
 
         // Numbers: simple subset for now
         if (this.isNumberStart(ch)) {
-            const { start, end } = this.readNumberSpan();
-            const numberValue = parseNumberSpan(this.src, start, end);
+            const { start, end, numberValue } = this.readNumberTokenFast();
             const emitStr = this.opts.emitNumberStrings !== false;
             const value = emitStr ? this.src.slice(start, end) : '';
             return { kind: 'number', value, numberValue, spanStart: start, spanEnd: end, offset, line, col };
@@ -228,37 +227,84 @@ export class UsdaLexer {
         return src.slice(a, b);
     }
 
-    private readNumberSpan(): { start: number; end: number } {
+    private readNumberTokenFast(): { start: number; end: number; numberValue: number } {
+        // Parse number token in a single pass WITHOUT calling advance() per character.
+        // Assumes no newlines inside number literals (true for USDA numeric tokens).
         const src = this.src;
         const len = src.length;
         const start = this.i;
-        const c0 = src.charCodeAt(this.i);
-        if (c0 === 43 /* + */ || c0 === 45 /* - */) this.advance(1);
-        while (this.i < len) {
-            const c = src.charCodeAt(this.i);
-            if (c >= 48 && c <= 57) this.advance(1);
-            else break;
+        let i = start;
+
+        // sign
+        let sign = 1;
+        const c0 = src.charCodeAt(i);
+        if (c0 === 45 /* - */) { sign = -1; i++; }
+        else if (c0 === 43 /* + */) { i++; }
+
+        // integer part
+        let intPart = 0;
+        let sawDigit = false;
+        while (i < len) {
+            const c = src.charCodeAt(i);
+            if (c >= 48 && c <= 57) {
+                sawDigit = true;
+                intPart = intPart * 10 + (c - 48);
+                i++;
+            } else break;
         }
-        if (src.charCodeAt(this.i) === 46 /* . */) {
-            this.advance(1);
-            while (this.i < len) {
-                const c = src.charCodeAt(this.i);
-                if (c >= 48 && c <= 57) this.advance(1);
-                else break;
+        if (!sawDigit) {
+            // malformed; consume 1 char to avoid infinite loops
+            this.i = Math.min(len, start + 1);
+            this.col += (this.i - start);
+            return { start, end: this.i, numberValue: NaN };
+        }
+
+        // fraction
+        let fracPart = 0;
+        let fracDiv = 1;
+        if (i < len && src.charCodeAt(i) === 46 /* . */) {
+            i++;
+            while (i < len) {
+                const c = src.charCodeAt(i);
+                if (c >= 48 && c <= 57) {
+                    fracPart = fracPart * 10 + (c - 48);
+                    fracDiv *= 10;
+                    i++;
+                } else break;
             }
         }
-        const e = src.charCodeAt(this.i);
-        if (e === 101 /* e */ || e === 69 /* E */) {
-            this.advance(1);
-            const s = src.charCodeAt(this.i);
-            if (s === 43 /* + */ || s === 45 /* - */) this.advance(1);
-            while (this.i < len) {
-                const c = src.charCodeAt(this.i);
-                if (c >= 48 && c <= 57) this.advance(1);
-                else break;
+
+        let val = intPart + (fracDiv !== 1 ? (fracPart / fracDiv) : 0);
+
+        // exponent (optional)
+        if (i < len) {
+            const ce = src.charCodeAt(i);
+            if (ce === 101 /* e */ || ce === 69 /* E */) {
+                i++;
+                let expSign = 1;
+                if (i < len) {
+                    const cs = src.charCodeAt(i);
+                    if (cs === 45 /* - */) { expSign = -1; i++; }
+                    else if (cs === 43 /* + */) { i++; }
+                }
+                let exp = 0;
+                let sawExp = false;
+                while (i < len) {
+                    const c = src.charCodeAt(i);
+                    if (c >= 48 && c <= 57) {
+                        sawExp = true;
+                        exp = exp * 10 + (c - 48);
+                        i++;
+                    } else break;
+                }
+                if (sawExp) val = val * Math.pow(10, expSign * exp);
             }
         }
-        return { start, end: this.i };
+
+        // Commit consume
+        this.i = i;
+        this.col += (i - start);
+        return { start, end: i, numberValue: sign * val };
     }
 
     private readIdentifier(): string {
@@ -341,75 +387,6 @@ export class UsdaLexer {
  * Supported grammar matches `readNumberSpan()`:
  *   [+-]? DIGITS ( '.' DIGITS )? ( [eE] [+-]? DIGITS )?
  */
-function parseNumberSpan(src: string, start: number, end: number): number {
-    if (end <= start) return NaN;
-    let i = start;
-    let sign = 1;
-    const c0 = src.charCodeAt(i);
-    if (c0 === 45 /* - */) { sign = -1; i++; }
-    else if (c0 === 43 /* + */) { i++; }
-
-    let intPart = 0;
-    let sawDigit = false;
-    while (i < end) {
-        const c = src.charCodeAt(i);
-        if (c >= 48 && c <= 57) {
-            sawDigit = true;
-            intPart = intPart * 10 + (c - 48);
-            i++;
-            continue;
-        }
-        break;
-    }
-
-    let fracPart = 0;
-    let fracDiv = 1;
-    if (i < end && src.charCodeAt(i) === 46 /* . */) {
-        i++;
-        while (i < end) {
-            const c = src.charCodeAt(i);
-            if (c >= 48 && c <= 57) {
-                sawDigit = true;
-                fracPart = fracPart * 10 + (c - 48);
-                fracDiv *= 10;
-                i++;
-                continue;
-            }
-            break;
-        }
-    }
-
-    if (!sawDigit) return NaN;
-    let val = intPart + fracPart / fracDiv;
-
-    if (i < end) {
-        const ce = src.charCodeAt(i);
-        if (ce === 101 /* e */ || ce === 69 /* E */) {
-            i++;
-            let expSign = 1;
-            if (i < end) {
-                const cs = src.charCodeAt(i);
-                if (cs === 45 /* - */) { expSign = -1; i++; }
-                else if (cs === 43 /* + */) { i++; }
-            }
-            let exp = 0;
-            let sawExp = false;
-            while (i < end) {
-                const c = src.charCodeAt(i);
-                if (c >= 48 && c <= 57) {
-                    sawExp = true;
-                    exp = exp * 10 + (c - 48);
-                    i++;
-                    continue;
-                }
-                break;
-            }
-            if (!sawExp) return NaN;
-            val = val * Math.pow(10, expSign * exp);
-        }
-    }
-
-    return sign * val;
-}
+// (No standalone parseNumberSpan needed anymore; number parsing is fused into readNumberTokenFast()).
 
 
