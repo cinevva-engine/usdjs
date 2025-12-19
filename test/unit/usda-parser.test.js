@@ -39,21 +39,36 @@ def Xform "World" {
     assert.deepEqual(cube.properties.get('tex').defaultValue, { type: 'asset', value: 'textures/albedo.png', __fromIdentifier: '<memory>' });
 
     assert.equal(cube.properties.get('faceVertexCounts').typeName, 'int[]');
-    assert.deepEqual(cube.properties.get('faceVertexCounts').defaultValue, {
-        type: 'array',
-        elementType: 'int',
-        value: [3, 3, 3, 3]
-    });
+    const fvc = cube.properties.get('faceVertexCounts').defaultValue;
+    assert.ok(fvc && typeof fvc === 'object');
+    if (fvc.type === 'typedArray') {
+        assert.equal(fvc.elementType, 'int');
+        assert.deepEqual(Array.from(fvc.value), [3, 3, 3, 3]);
+    } else {
+        assert.deepEqual(fvc, { type: 'array', elementType: 'int', value: [3, 3, 3, 3] });
+    }
 
     const pts = cube.properties.get('points').defaultValue;
-    assert.equal(pts.type, 'array');
-    assert.equal(pts.elementType, 'point3f');
-    assert.equal(pts.value[0].type, 'tuple');
-    assert.deepEqual(pts.value[0].value, [0, 0, 0]);
+    assert.ok(pts && typeof pts === 'object');
+    if (pts.type === 'typedArray') {
+        assert.equal(pts.elementType, 'point3f');
+        assert.deepEqual(Array.from(pts.value), [0, 0, 0, 1, 0, 0, 1, 1, 0]);
+    } else {
+        assert.equal(pts.type, 'array');
+        assert.equal(pts.elementType, 'point3f');
+        assert.equal(pts.value[0].type, 'tuple');
+        assert.deepEqual(pts.value[0].value, [0, 0, 0]);
+    }
 
     const st = cube.properties.get('primvars:st').defaultValue;
-    assert.equal(st.type, 'array');
-    assert.equal(st.elementType, 'texCoord2f');
+    assert.ok(st && typeof st === 'object');
+    if (st.type === 'typedArray') {
+        assert.equal(st.elementType, 'texCoord2f');
+        assert.deepEqual(Array.from(st.value), [0, 0, 1, 0]);
+    } else {
+        assert.equal(st.type, 'array');
+        assert.equal(st.elementType, 'texCoord2f');
+    }
 });
 
 test('USDA parser: relationship-style property parses <SdfPath> value', () => {

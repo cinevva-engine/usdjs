@@ -2,6 +2,30 @@ import { SdfLayer, type SdfPrimSpecifier, type SdfValue, type SdfPropertySpec, t
 import { SdfPath } from '../sdf/path.js';
 import { UsdaLexer, type UsdaToken } from './lexer.js';
 
+function tupleArityForElementType(elementType: string): { n: 2 | 3 | 4; kind: 'f32' | 'f64' } | null {
+    // Conservative whitelist for now (covers the biggest heap offenders).
+    // USD commonly uses these in geometry:
+    // - point3f[], normal3f[], vector3f[], color3f[], texCoord2f[]
+    // Also allow generic suffix patterns like *2f/*3f/*4f and *2d/*3d/*4d.
+    const m = /([234])([fd])$/.exec(elementType);
+    if (m) {
+        const n = Number(m[1]) as 2 | 3 | 4;
+        const kind = m[2] === 'd' ? 'f64' : 'f32';
+        return { n, kind };
+    }
+    if (elementType === 'texCoord2f') return { n: 2, kind: 'f32' };
+    if (elementType === 'texCoord2d') return { n: 2, kind: 'f64' };
+    return null;
+}
+
+type PackedNumericArray = Float32Array | Float64Array | Int32Array | Uint32Array;
+
+function grow<T extends PackedNumericArray>(arr: T): T {
+    const next = new (arr.constructor as any)(Math.max(16, arr.length * 2)) as T;
+    next.set(arr);
+    return next;
+}
+
 export interface UsdaParseOptions {
     identifier?: string;
 }
@@ -23,7 +47,7 @@ export interface UsdaParseOptions {
  */
 export function parseUsdaToLayer(src: string, opts: UsdaParseOptions = {}): SdfLayer {
     const layer = new SdfLayer(opts.identifier ?? '<memory>');
-    const lexer = new UsdaLexer(src, { emitNewlines: false });
+    const lexer = new UsdaLexer(src, { emitNewlines: false, emitNumberStrings: false });
     const p = new Parser(lexer, layer);
     p.parseLayer();
     return layer;
@@ -228,10 +252,19 @@ class Parser {
         }
 
         if (this.isKind('number')) {
-            const s = this.tok.value;
+            const tok = this.tok;
             this.next();
-            const n = Number(s);
-            return Number.isFinite(n) ? n : s;
+            const n = tok.numberValue;
+            if (typeof n === 'number' && Number.isFinite(n)) return n;
+            // Fallback: allocate only if needed.
+            if (typeof tok.spanStart === 'number' && typeof tok.spanEnd === 'number') {
+                const s = this.lexer.slice(tok.spanStart, tok.spanEnd);
+                const nn = Number(s);
+                return Number.isFinite(nn) ? nn : s;
+            }
+            const s = tok.value;
+            const nn = Number(s);
+            return Number.isFinite(nn) ? nn : s;
         }
 
         if (this.isKind('path')) {
@@ -277,19 +310,141 @@ class Parser {
 
     private parseArray(elementType: string): SdfValue {
         this.expectPunct('[', 'Expected "["');
+        // Fast path: parse numeric arrays directly into packed typed arrays (avoid allocating tuple objects).
+        const packed = this.parsePackedNumericArrayMaybe(elementType);
+        if (packed) {
+            this.expectPunct(']', 'Expected "]"');
+            return packed;
+        }
+
+        // Generic fallback (keeps original structure).
         const values: SdfValue[] = [];
         while (!this.isKind('eof') && !this.isPunct(']')) {
-            // Allow commas between elements
             if (this.isPunct(',')) {
                 this.next();
                 continue;
             }
             values.push(this.parseValue());
-            // Optional comma
             if (this.isPunct(',')) this.next();
         }
         this.expectPunct(']', 'Expected "]"');
         return { type: 'array', elementType, value: values };
+    }
+
+    private parsePackedNumericArrayMaybe(elementType: string): SdfValue | null {
+        // Scalar numeric arrays
+        if (elementType === 'float' || elementType === 'half') {
+            let out = new Float32Array(256);
+            let len = 0;
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                const n = this.readNumberTokenFast();
+                if (n === null) return null;
+                if (len >= out.length) out = grow(out);
+                out[len++] = n;
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) };
+        }
+        if (elementType === 'double') {
+            let out = new Float64Array(256);
+            let len = 0;
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                const n = this.readNumberTokenFast();
+                if (n === null) return null;
+                if (len >= out.length) out = grow(out);
+                out[len++] = n;
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) };
+        }
+        if (elementType === 'int') {
+            let out = new Int32Array(256);
+            let len = 0;
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                const n = this.readNumberTokenFast();
+                if (n === null) return null;
+                if (len >= out.length) out = grow(out);
+                out[len++] = n | 0;
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) };
+        }
+        if (elementType === 'uint') {
+            let out = new Uint32Array(256);
+            let len = 0;
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                const n = this.readNumberTokenFast();
+                if (n === null) return null;
+                if (len >= out.length) out = grow(out);
+                out[len++] = (n >>> 0);
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) };
+        }
+
+        // Tuple arrays (2/3/4) of numeric values
+        const tuple = tupleArityForElementType(elementType);
+        if (!tuple) return null;
+
+        const n = tuple.n;
+        if (tuple.kind === 'f64') {
+            let out = new Float64Array(256 * n);
+            let len = 0; // number of numeric scalars written
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                if (!this.isPunct('(')) return null;
+                this.next(); // consume '('
+                for (let k = 0; k < n; k++) {
+                    if (this.isPunct(',')) this.next();
+                    const num = this.readNumberTokenFast();
+                    if (num === null) return null;
+                    if (len >= out.length) out = grow(out);
+                    out[len++] = num;
+                    if (this.isPunct(',')) this.next();
+                }
+                this.expectPunct(')', 'Expected ")" to close tuple');
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) };
+        } else {
+            let out = new Float32Array(256 * n);
+            let len = 0;
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                if (!this.isPunct('(')) return null;
+                this.next(); // consume '('
+                for (let k = 0; k < n; k++) {
+                    if (this.isPunct(',')) this.next();
+                    const num = this.readNumberTokenFast();
+                    if (num === null) return null;
+                    if (len >= out.length) out = grow(out);
+                    out[len++] = num;
+                    if (this.isPunct(',')) this.next();
+                }
+                this.expectPunct(')', 'Expected ")" to close tuple');
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) };
+        }
+    }
+
+    private readNumberTokenFast(): number | null {
+        if (this.tok.kind !== 'number') return null;
+        const tok = this.tok;
+        const n = tok.numberValue;
+        this.next();
+        if (typeof n === 'number' && Number.isFinite(n)) return n;
+        // Rare fallback: if numberValue is missing/NaN, fall back to parsing the token string.
+        const s =
+            typeof tok.spanStart === 'number' && typeof tok.spanEnd === 'number'
+                ? this.lexer.slice(tok.spanStart, tok.spanEnd)
+                : tok.value;
+        const nn = Number(s);
+        return Number.isFinite(nn) ? nn : null;
     }
 
     private parseTuple(): SdfValue {
@@ -649,8 +804,13 @@ class Parser {
 
             // Parse time code (number)
             if (this.isKind('number')) {
-                const timeStr = this.tok.value;
-                const time = Number(timeStr);
+                const tok = this.tok;
+                const time =
+                    typeof tok.numberValue === 'number' && Number.isFinite(tok.numberValue)
+                        ? tok.numberValue
+                        : typeof tok.spanStart === 'number' && typeof tok.spanEnd === 'number'
+                            ? Number(this.lexer.slice(tok.spanStart, tok.spanEnd))
+                            : Number(tok.value);
                 this.next();
 
                 // Expect colon

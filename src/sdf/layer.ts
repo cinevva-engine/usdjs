@@ -7,7 +7,7 @@ export type SdfValue =
     | string
     | { type: 'token'; value: string }
     // Allow extra fields so we can attach origin info during parsing (e.g. `__fromIdentifier`)
-    | { type: 'asset'; value: string; [k: string]: any }
+    | { type: 'asset'; value: string;[k: string]: any }
     | { type: 'sdfpath'; value: string }
     /**
      * Reference/payload arc value.
@@ -16,11 +16,19 @@ export type SdfValue =
      * - `@file.usd@</Prim>` (targetPath)
      * - optional arg list: `@file.usd@ (offset = 2, scale = 1)` (represented as extra fields)
      */
-    | { type: 'reference'; assetPath: string; targetPath?: string; [k: string]: any }
+    | { type: 'reference'; assetPath: string; targetPath?: string;[k: string]: any }
     | { type: 'vec2f' | 'vec3f' | 'vec4f'; value: number[] }
     | { type: 'matrix4d'; value: number[] }
     | { type: 'tuple'; value: SdfValue[] }
     | { type: 'array'; elementType: string; value: SdfValue[] }
+    /**
+     * Packed numeric arrays (memory/perf optimization).
+     *
+     * Used by the USDA parser for large numeric arrays like:
+     * - `int[]`, `float[]`, `double[]`
+     * - `point3f[]`, `normal3f[]`, `texCoord2f[]`, etc (packed as flat arrays)
+     */
+    | { type: 'typedArray'; elementType: string; value: Float32Array | Float64Array | Int32Array | Uint32Array }
     | { type: 'dict'; value: Record<string, SdfValue> };
 
 export type SdfPrimSpecifier = 'def' | 'over' | 'class';
