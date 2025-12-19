@@ -7,6 +7,13 @@ function tupleArityForElementType(elementType: string): { n: 2 | 3 | 4; kind: 'f
     // USD commonly uses these in geometry:
     // - point3f[], normal3f[], vector3f[], color3f[], texCoord2f[]
     // Also allow generic suffix patterns like *2f/*3f/*4f and *2d/*3d/*4d.
+    // matrix4* is 4x4 (16 numbers), not a 4-tuple; handled separately.
+    if (elementType === 'matrix4d' || elementType === 'matrix4f' || elementType === 'matrix4h') return null;
+
+    // Quaternions (USD stores as (real, i, j, k) == (w, x, y, z)).
+    if (elementType === 'quatd') return { n: 4, kind: 'f64' };
+    if (elementType === 'quatf' || elementType === 'quath') return { n: 4, kind: 'f32' };
+
     const m = /([234])([fd])$/.exec(elementType);
     if (m) {
         const n = Number(m[1]) as 2 | 3 | 4;
@@ -235,6 +242,20 @@ class Parser {
             return arr;
         }
 
+        // Special-case: pack matrix4* and quat* scalar values into typed arrays.
+        // This is common in xforms (`xformOp:transform`) and animation (`orient`, rotations).
+        if (this.isPunct('(') && ctx && !ctx.isArrayType) {
+            const bt = ctx.baseType;
+            if (bt === 'matrix4d' || bt === 'matrix4f' || bt === 'matrix4h') {
+                const m = this.parsePackedMatrix4Scalar(bt);
+                if (m) return m;
+            }
+            if (bt === 'quatd' || bt === 'quatf' || bt === 'quath') {
+                const q = this.parsePackedQuatScalar(bt);
+                if (q) return q;
+            }
+        }
+
         // Tuples: (a, b, c)
         if (this.isPunct('(')) {
             return this.parseTuple();
@@ -331,7 +352,104 @@ class Parser {
         return { type: 'array', elementType, value: values };
     }
 
+    private parsePackedQuatScalar(elementType: 'quatd' | 'quatf' | 'quath'): SdfValue | null {
+        // quat* is authored as (w, x, y, z) (USD stores real first).
+        const kind: 'f64' | 'f32' = elementType === 'quatd' ? 'f64' : 'f32';
+        const out = kind === 'f64' ? new Float64Array(4) : new Float32Array(4);
+        if (!this.isPunct('(')) return null;
+        this.next(); // '('
+        for (let k = 0; k < 4; k++) {
+            if (this.isPunct(',')) this.next();
+            const n = this.readNumberTokenFast();
+            if (n === null) return null;
+            out[k] = n;
+            if (this.isPunct(',')) this.next();
+        }
+        this.expectPunct(')', 'Expected ")" to close quat');
+        return { type: 'typedArray', elementType, value: out };
+    }
+
+    private parsePackedMatrix4Scalar(elementType: 'matrix4d' | 'matrix4f' | 'matrix4h'): SdfValue | null {
+        const kind: 'f64' | 'f32' = elementType === 'matrix4d' ? 'f64' : 'f32';
+        const out = kind === 'f64' ? new Float64Array(16) : new Float32Array(16);
+        if (!this.isPunct('(')) return null;
+        this.next(); // '(' (outer)
+
+        // Two common encodings:
+        // 1) Nested rows: ( (r0...), (r1...), (r2...), (r3...) )
+        // 2) Flat 16-tuple: (r0c0, r0c1, ... r3c3)
+        if (this.isPunct('(')) {
+            let w = 0;
+            for (let row = 0; row < 4; row++) {
+                this.expectPunct('(', 'Expected "(" to open matrix row');
+                for (let k = 0; k < 4; k++) {
+                    if (this.isPunct(',')) this.next();
+                    const n = this.readNumberTokenFast();
+                    if (n === null) return null;
+                    out[w++] = n;
+                    if (this.isPunct(',')) this.next();
+                }
+                this.expectPunct(')', 'Expected ")" to close matrix row');
+                if (this.isPunct(',')) this.next();
+            }
+            this.expectPunct(')', 'Expected ")" to close matrix');
+            return { type: 'typedArray', elementType, value: out };
+        }
+
+        for (let k = 0; k < 16; k++) {
+            if (this.isPunct(',')) this.next();
+            const n = this.readNumberTokenFast();
+            if (n === null) return null;
+            out[k] = n;
+            if (this.isPunct(',')) this.next();
+        }
+        this.expectPunct(')', 'Expected ")" to close matrix');
+        return { type: 'typedArray', elementType, value: out };
+    }
+
     private parsePackedNumericArrayMaybe(elementType: string): SdfValue | null {
+        // matrix4*[]: pack as flat 16*N typed array (row-major as-authored).
+        if (elementType === 'matrix4d' || elementType === 'matrix4f' || elementType === 'matrix4h') {
+            const kind: 'f64' | 'f32' = elementType === 'matrix4d' ? 'f64' : 'f32';
+            let out = kind === 'f64' ? (new Float64Array(256 * 16) as PackedNumericArray) : (new Float32Array(256 * 16) as PackedNumericArray);
+            let len = 0;
+            while (!this.isKind('eof') && !this.isPunct(']')) {
+                if (this.isPunct(',')) { this.next(); continue; }
+                if (!this.isPunct('(')) return null;
+                this.next(); // '(' outer
+
+                if (this.isPunct('(')) {
+                    for (let row = 0; row < 4; row++) {
+                        this.expectPunct('(', 'Expected "(" to open matrix row');
+                        for (let k = 0; k < 4; k++) {
+                            if (this.isPunct(',')) this.next();
+                            const num = this.readNumberTokenFast();
+                            if (num === null) return null;
+                            if (len >= out.length) out = grow(out);
+                            out[len++] = num;
+                            if (this.isPunct(',')) this.next();
+                        }
+                        this.expectPunct(')', 'Expected ")" to close matrix row');
+                        if (this.isPunct(',')) this.next();
+                    }
+                    this.expectPunct(')', 'Expected ")" to close matrix');
+                } else {
+                    for (let k = 0; k < 16; k++) {
+                        if (this.isPunct(',')) this.next();
+                        const num = this.readNumberTokenFast();
+                        if (num === null) return null;
+                        if (len >= out.length) out = grow(out);
+                        out[len++] = num;
+                        if (this.isPunct(',')) this.next();
+                    }
+                    this.expectPunct(')', 'Expected ")" to close matrix');
+                }
+
+                if (this.isPunct(',')) this.next();
+            }
+            return { type: 'typedArray', elementType, value: out.slice(0, len) as any };
+        }
+
         // Scalar numeric arrays
         if (elementType === 'float' || elementType === 'half') {
             let out = new Float32Array(256);

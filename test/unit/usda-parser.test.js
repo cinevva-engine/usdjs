@@ -71,6 +71,37 @@ def Xform "World" {
     }
 });
 
+test('USDA parser: packs quat and matrix types into typed arrays', () => {
+    const src = `#usda 1.0
+def Xform "World" {
+  quath orient = (1, 0, 0, 0)
+  matrix4d xformOp:transform = ( (1,0,0,0), (0,1,0,0), (0,0,1,0), (0,0,0,1) )
+  quatf[] rotations = [(1,0,0,0), (0,1,0,0)]
+}
+`;
+    const stage = UsdStage.openUSDA(src);
+    const world = stage.rootLayer.getPrim(SdfPath.parse('/World'));
+    assert.ok(world);
+
+    const orient = world.properties.get('orient')?.defaultValue;
+    assert.ok(orient && typeof orient === 'object');
+    assert.equal(orient.type, 'typedArray');
+    assert.equal(orient.elementType, 'quath');
+    assert.deepEqual(Array.from(orient.value), [1, 0, 0, 0]);
+
+    const m = world.properties.get('xformOp:transform')?.defaultValue;
+    assert.ok(m && typeof m === 'object');
+    assert.equal(m.type, 'typedArray');
+    assert.equal(m.elementType, 'matrix4d');
+    assert.equal(m.value.length, 16);
+
+    const rots = world.properties.get('rotations')?.defaultValue;
+    assert.ok(rots && typeof rots === 'object');
+    assert.equal(rots.type, 'typedArray');
+    assert.equal(rots.elementType, 'quatf');
+    assert.deepEqual(Array.from(rots.value), [1, 0, 0, 0, 0, 1, 0, 0]);
+});
+
 test('USDA parser: relationship-style property parses <SdfPath> value', () => {
     const src = `#usda 1.0
 def Xform "World" {
