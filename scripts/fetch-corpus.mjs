@@ -52,8 +52,22 @@ async function main() {
     for (const src of manifest.sources) {
         const dest = path.join(outRoot, src.name);
         const marker = path.join(dest, '.extracted');
+        const extractDir = path.join(dest, src.extractSubdir);
         if (fs.existsSync(marker)) {
             console.log(`✓ ${src.name} already extracted`);
+            continue;
+        }
+        // If the corpus was cloned/extracted manually, prefer it and just create the marker.
+        if (fs.existsSync(extractDir)) {
+            fs.writeFileSync(
+                marker,
+                JSON.stringify(
+                    { extractedAt: new Date().toISOString(), zipUrl: src.zipUrl, extractDir, note: 'pre-existing extractDir detected; skipping download' },
+                    null,
+                    2
+                )
+            );
+            console.log(`✓ ${src.name} already present (found ${src.extractSubdir}); marked extracted`);
             continue;
         }
 
@@ -63,7 +77,6 @@ async function main() {
         await downloadToFile(src.zipUrl, zipFile);
 
         console.log(`↯ Extracting ${src.name}`);
-        const extractDir = path.join(dest, src.extractSubdir);
         await extractZip(zipFile, dest);
 
         // Mark extracted; keep zip for caching/debugging.
