@@ -682,22 +682,11 @@ class UsdcReader {
                         // The sibling is at thisIndex + jump, and should have the SAME parent as this node
                         const siblingIndex = thisIndex + jumps[thisIndex];
                         if (siblingIndex > thisIndex && siblingIndex <= endIndex) {
-                            // Find where the sibling's subtree ends
-                            // Walk forward from siblingIndex until we find a node with no child/sibling
-                            let siblingEndIndex = siblingIndex;
-                            for (let j = siblingIndex; j <= endIndex; j++) {
-                                const jHasChild = jumps[j] > 0 || jumps[j] === -1;
-                                const jHasSibling = jumps[j] >= 0;
-                                if (!jHasChild && !jHasSibling) {
-                                    // Found end of sibling subtree
-                                    siblingEndIndex = j;
-                                    break;
-                                }
-                                if (j === endIndex) {
-                                    siblingEndIndex = j;
-                                    break;
-                                }
-                            }
+                            // The sibling subtree ends at endIndex (before the next sibling of the parent)
+                            // This is because the current frame's endIndex marks the boundary before
+                            // the parent's next sibling, so all nodes from siblingIndex to endIndex
+                            // are part of the sibling subtree
+                            const siblingEndIndex = endIndex;
                             
                             // Push frames in execution order (LIFO stack, so push in reverse):
                             // 1. Process rest of current range (after sibling subtree ends)
@@ -710,7 +699,7 @@ class UsdcReader {
                                 });
                             }
                             
-                            // 2. Process sibling subtree (with SAME parent as current node, not this node's path)
+                            // 2. Process sibling subtree (with SAME parent as current node)
                             stack.push({
                                 startIndex: siblingIndex,
                                 endIndex: siblingEndIndex,
