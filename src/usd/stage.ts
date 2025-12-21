@@ -2,6 +2,7 @@ import { SdfLayer, type SdfPrimSpec, type SdfPropertySpec, type SdfValue } from 
 import { SdfPath } from '../sdf/path.js';
 import { parseUsdaToLayer } from '../usda/parser.js';
 import { parseUsdcToLayer } from '../usdc/parser.js';
+import { parseUsdzToLayer, isUsdzContent } from '../usdz/parser.js';
 import { parseMaterialXToLayer, isMaterialXContent } from '../materialx/parser.js';
 import { composeLayerStack, mergePrimSpec, mergePrimSpecWeakIntoStrong } from './compose.js';
 import { resolveAssetPath, type UsdResolver } from './resolver.js';
@@ -42,7 +43,21 @@ export class UsdStage {
     }
 
     /**
+     * Open a USDZ (ZIP archive) file.
+     * Uses browser's native DecompressionStream API for deflate decompression.
+     * 
+     * @param buffer - ArrayBuffer or Uint8Array containing the USDZ file data
+     * @param identifier - Optional identifier for the layer (defaults to '<memory>')
+     * @returns Promise<UsdStage> containing the parsed layer
+     */
+    static async openUSDZ(buffer: ArrayBuffer | Uint8Array, identifier = '<memory>'): Promise<UsdStage> {
+        const layer = await parseUsdzToLayer(buffer, { identifier });
+        return new UsdStage(layer, [layer]);
+    }
+
+    /**
      * Auto-detect USD format (USDA text or USDC binary) and open.
+     * Note: For USDZ files, use openUSDZ() instead (async).
      * 
      * @param data - String (USDA) or ArrayBuffer/Uint8Array (USDC)
      * @param identifier - Optional identifier for the layer

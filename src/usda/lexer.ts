@@ -199,10 +199,32 @@ export class UsdaLexer {
     private readAtPath(): string {
         const src = this.src;
         const start = this.i;
-        const end = src.indexOf('@', start + 1);
-        if (end === -1) throw new Error(`Unterminated @path@ at ${this.line}:${this.col}`);
-        this.advance(end + 1 - start);
-        return src.slice(start + 1, end);
+        const len = src.length;
+
+        // Skip the opening '@'
+        this.advance(1);
+
+        // Find the closing '@' character
+        // Search character by character to handle edge cases and provide better error messages
+        let end = -1;
+        for (let i = this.i; i < len; i++) {
+            if (src[i] === '@') {
+                end = i;
+                break;
+            }
+        }
+
+        if (end === -1) {
+            // Provide context in error message
+            const contextStart = Math.max(0, start - 50);
+            const contextEnd = Math.min(len, start + 100);
+            const context = src.slice(contextStart, contextEnd);
+            throw new Error(`Unterminated @path@ at ${this.line}:${this.col}. Context: "${context}"`);
+        }
+
+        const value = src.slice(this.i, end);
+        this.advance(end + 1 - this.i);
+        return value;
     }
 
     private readSdfPath(): string {
