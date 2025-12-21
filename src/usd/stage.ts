@@ -1,6 +1,7 @@
 import { SdfLayer, type SdfPrimSpec, type SdfPropertySpec, type SdfValue } from '../sdf/layer.js';
 import { SdfPath } from '../sdf/path.js';
 import { parseUsdaToLayer } from '../usda/parser.js';
+import { parseUsdcToLayer } from '../usdc/parser.js';
 import { parseMaterialXToLayer, isMaterialXContent } from '../materialx/parser.js';
 import { composeLayerStack, mergePrimSpec, mergePrimSpecWeakIntoStrong } from './compose.js';
 import { resolveAssetPath, type UsdResolver } from './resolver.js';
@@ -26,6 +27,49 @@ export class UsdStage {
     static openUSDA(src: string, identifier = '<memory>'): UsdStage {
         const layer = parseUsdaToLayer(src, { identifier });
         return new UsdStage(layer, [layer]);
+    }
+
+    /**
+     * Open a USDC (binary crate format) file.
+     * 
+     * @param buffer - ArrayBuffer or Uint8Array containing the USDC file data
+     * @param identifier - Optional identifier for the layer (defaults to '<memory>')
+     * @returns UsdStage containing the parsed layer
+     */
+    static openUSDC(buffer: ArrayBuffer | Uint8Array, identifier = '<memory>'): UsdStage {
+        const layer = parseUsdcToLayer(buffer, { identifier });
+        return new UsdStage(layer, [layer]);
+    }
+
+    /**
+     * Auto-detect USD format (USDA text or USDC binary) and open.
+     * 
+     * @param data - String (USDA) or ArrayBuffer/Uint8Array (USDC)
+     * @param identifier - Optional identifier for the layer
+     * @returns UsdStage containing the parsed layer
+     */
+    static open(data: string | ArrayBuffer | Uint8Array, identifier = '<memory>'): UsdStage {
+        if (typeof data === 'string') {
+            return UsdStage.openUSDA(data, identifier);
+        }
+        
+        // Check for USDC magic header "PXR-USDC"
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (bytes.length >= 8 &&
+            bytes[0] === 0x50 && // P
+            bytes[1] === 0x58 && // X
+            bytes[2] === 0x52 && // R
+            bytes[3] === 0x2D && // -
+            bytes[4] === 0x55 && // U
+            bytes[5] === 0x53 && // S
+            bytes[6] === 0x44 && // D
+            bytes[7] === 0x43) { // C
+            return UsdStage.openUSDC(bytes, identifier);
+        }
+        
+        // Try as text (USDA)
+        const text = new TextDecoder('utf-8').decode(bytes);
+        return UsdStage.openUSDA(text, identifier);
     }
 
     static async openUSDAWithResolver(src: string, resolver: UsdResolver, identifier = '<memory>'): Promise<UsdStage> {
