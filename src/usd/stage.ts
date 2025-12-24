@@ -67,7 +67,7 @@ export class UsdStage {
         if (typeof data === 'string') {
             return UsdStage.openUSDA(data, identifier);
         }
-        
+
         // Check for USDC magic header "PXR-USDC"
         const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
         if (bytes.length >= 8 &&
@@ -81,7 +81,7 @@ export class UsdStage {
             bytes[7] === 0x43) { // C
             return UsdStage.openUSDC(bytes, identifier);
         }
-        
+
         // Try as text (USDA)
         const text = new TextDecoder('utf-8').decode(bytes);
         return UsdStage.openUSDA(text, identifier);
@@ -944,6 +944,23 @@ async function expandArcsInLayer(
  */
 function applyInternalReferences(layer: SdfLayer): void {
     const prims = listPrimSpecs(layer.root);
+    // Track a coarse "strength" marker for Pcp-lite ordering decisions.
+    // - Prim specs authored locally in this layer default to strength=2
+    // - Prim specs introduced via internal references default to strength=1
+    //
+    // Important: `applyInternalReferences` may run multiple times. Do not overwrite existing markers.
+    for (const p of prims) {
+        const anyP = p as any;
+        if (typeof anyP.__usdjsStrength !== 'number') anyP.__usdjsStrength = 2;
+    }
+
+    const markStrengthRecursive = (p: any, strength: number): void => {
+        const anyP = p as any;
+        if (typeof anyP.__usdjsStrength !== 'number') anyP.__usdjsStrength = strength;
+        if (!p.children) return;
+        for (const c of p.children.values()) markStrengthRecursive(c, strength);
+    };
+
     for (const prim of prims) {
         if (!prim.metadata) continue;
         const internalRefs = extractInternalRefPaths(prim.metadata.references);
@@ -957,6 +974,8 @@ function applyInternalReferences(layer: SdfLayer): void {
             if (!srcPrim) continue;
             // Clone the referenced prim with path remapping and merge into the target.
             const grafted = clonePrimWithRemappedPaths(srcPrim, prim.path.primPath, srcPrim.path.primPath);
+            // Anything coming from an internal reference is considered weaker than locally-authored prim specs.
+            markStrengthRecursive(grafted as any, 1);
             // Internal references should not overwrite opinions authored on the referencing prim.
             mergePrimSpecWeakIntoStrong(prim, grafted);
         }
@@ -986,8 +1005,22 @@ function applyInherits(layer: SdfLayer): void {
             if (!srcPrim) continue;
             // Clone with path remapping: class opinions should apply as-if authored on the inheriting prim.
             const grafted = clonePrimWithRemappedPaths(srcPrim, prim.path.primPath, srcPrim.path.primPath);
-            // Inherited opinions are weaker than the inheriting prim's authored opinions.
-            mergePrimSpecWeakIntoStrong(prim, grafted);
+            // Pcp-lite nuance:
+            // In practice (see usd-wg-assets `inherit_and_specialize.usda`), an inherited class opinion can be
+            // *stronger* than the inheriting prim's opinions when the class prim is overridden at a stronger site
+            // (e.g. local override inside a referencing prim) while the inheriting prim comes from a weaker site
+            // (e.g. introduced via internal reference).
+            //
+            // We approximate this by comparing coarse per-prim strength markers.
+            const dstStrength = typeof (prim as any).__usdjsStrength === 'number' ? (prim as any).__usdjsStrength : 2;
+            const srcStrength = typeof (srcPrim as any).__usdjsStrength === 'number' ? (srcPrim as any).__usdjsStrength : 2;
+            if (srcStrength > dstStrength) {
+                // Treat inherited opinions as stronger in this case.
+                mergePrimSpec(prim, grafted);
+            } else {
+                // Default: inherited opinions are weaker than the inheriting prim's authored opinions.
+                mergePrimSpecWeakIntoStrong(prim, grafted);
+            }
         }
     }
 }
