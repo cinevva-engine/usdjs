@@ -26,7 +26,7 @@ interface ZipEntry {
 async function parseZipStructure(data: Uint8Array): Promise<Map<string, ZipEntry>> {
     const entries = new Map<string, ZipEntry>();
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    
+
     // Find end of central directory record (EOCD)
     // EOCD signature: 0x06054b50
     // It's at the end of the file, but can have a comment, so search backwards
@@ -37,11 +37,11 @@ async function parseZipStructure(data: Uint8Array): Promise<Map<string, ZipEntry
             break;
         }
     }
-    
+
     if (eocdOffset === -1) {
         throw new Error('Invalid ZIP file: End of central directory not found');
     }
-    
+
     // Read EOCD
     const diskNumber = view.getUint16(eocdOffset + 4, true);
     const centralDirDisk = view.getUint16(eocdOffset + 6, true);
@@ -50,7 +50,7 @@ async function parseZipStructure(data: Uint8Array): Promise<Map<string, ZipEntry
     const centralDirSize = view.getUint32(eocdOffset + 12, true);
     const centralDirOffset = view.getUint32(eocdOffset + 16, true);
     const commentLength = view.getUint16(eocdOffset + 20, true);
-    
+
     // Read central directory
     let offset = centralDirOffset;
     for (let i = 0; i < totalRecords; i++) {
@@ -58,7 +58,7 @@ async function parseZipStructure(data: Uint8Array): Promise<Map<string, ZipEntry
         if (view.getUint32(offset, true) !== 0x02014b50) {
             throw new Error(`Invalid ZIP file: Central directory header not found at offset ${offset}`);
         }
-        
+
         const versionMadeBy = view.getUint16(offset + 4, true);
         const versionNeeded = view.getUint16(offset + 6, true);
         const flags = view.getUint16(offset + 8, true);
@@ -77,14 +77,14 @@ async function parseZipStructure(data: Uint8Array): Promise<Map<string, ZipEntry
         const internalAttrs = view.getUint16(offset + 36, true);
         const externalAttrs = view.getUint32(offset + 38, true);
         const localHeaderOffset = view.getUint32(offset + 42, true);
-        
+
         offset += 46;
-        
+
         // Read filename
         const filenameBytes = data.subarray(offset, offset + filenameLength);
         const filename = new TextDecoder('utf-8').decode(filenameBytes);
         offset += filenameLength + extraFieldLength + commentLength;
-        
+
         // Store entry (normalize path separators)
         // Note: We store compressedSize/uncompressedSize from central dir for reference,
         // but extractZipEntry will read the actual sizes from the local header
@@ -97,7 +97,7 @@ async function parseZipStructure(data: Uint8Array): Promise<Map<string, ZipEntry
             localHeaderOffset
         });
     }
-    
+
     return entries;
 }
 
@@ -110,12 +110,12 @@ async function extractZipEntry(
 ): Promise<Uint8Array> {
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     let offset = entry.localHeaderOffset;
-    
+
     // Local file header signature: 0x04034b50
     if (view.getUint32(offset, true) !== 0x04034b50) {
         throw new Error(`Invalid ZIP file: Local file header not found at offset ${offset}`);
     }
-    
+
     const versionNeeded = view.getUint16(offset + 4, true);
     const flags = view.getUint16(offset + 6, true);
     const compressionMethod = view.getUint16(offset + 8, true);
@@ -126,11 +126,11 @@ async function extractZipEntry(
     const uncompressedSize = view.getUint32(offset + 22, true); // Uncompressed size is at offset 22-25 (4 bytes)
     const filenameLength = view.getUint16(offset + 26, true); // Filename length is at offset 26-27 (2 bytes)
     const extraFieldLength = view.getUint16(offset + 28, true); // Extra field length is at offset 28-29 (2 bytes)
-    
+
     // Calculate data start offset
     // Local file header is 30 bytes + filename + extra field
     const dataStartOffset = offset + 30 + filenameLength + extraFieldLength;
-    
+
     // Validate bounds
     if (dataStartOffset + compressedSize > data.length) {
         throw new Error(
@@ -138,10 +138,10 @@ async function extractZipEntry(
             `Data start: ${dataStartOffset}, Size: ${compressedSize}, Buffer length: ${data.length}`
         );
     }
-    
+
     // Read compressed data
     const compressedData = data.subarray(dataStartOffset, dataStartOffset + compressedSize);
-    
+
     // Decompress if needed
     if (compressionMethod === 0) {
         // Stored (no compression)
@@ -157,13 +157,13 @@ async function extractZipEntry(
         const stream = new DecompressionStream('deflate');
         const writer = stream.writable.getWriter();
         const reader = stream.readable.getReader();
-        
+
         // Write compressed data - ensure it's a proper BufferSource
         // Create a copy with a regular ArrayBuffer to avoid SharedArrayBuffer issues
         const compressedBuffer = new Uint8Array(compressedData).buffer as ArrayBuffer;
         writer.write(compressedBuffer);
         writer.close();
-        
+
         // Read decompressed data
         const chunks: Uint8Array[] = [];
         let done = false;
@@ -174,7 +174,7 @@ async function extractZipEntry(
                 chunks.push(value);
             }
         }
-        
+
         // Combine chunks
         const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
         const result = new Uint8Array(totalLength);
@@ -183,7 +183,7 @@ async function extractZipEntry(
             result.set(chunk, pos);
             pos += chunk.length;
         }
-        
+
         return result;
     } else {
         throw new Error(`Unsupported compression method: ${compressionMethod}`);
@@ -196,17 +196,17 @@ async function extractZipEntry(
  */
 function findRootUsdFile(entries: Map<string, ZipEntry>): string | null {
     const usdExtensions = ['.usd', '.usda', '.usdc'];
-    
+
     // Sort entries by filename to ensure consistent ordering
     const sortedEntries = Array.from(entries.keys()).sort();
-    
+
     for (const filename of sortedEntries) {
         const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
         if (usdExtensions.includes(ext)) {
             return filename;
         }
     }
-    
+
     return null;
 }
 
@@ -223,36 +223,36 @@ export async function parseUsdzToLayer(
     opts: UsdzParseOptions = {}
 ): Promise<SdfLayer> {
     const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-    
+
     // Verify ZIP magic header (PK)
     if (data.length < 4 || data[0] !== 0x50 || data[1] !== 0x4B) {
         throw new Error('Invalid USDZ file: Not a valid ZIP archive');
     }
-    
+
     // Parse ZIP structure
     const entries = await parseZipStructure(data);
-    
+
     if (entries.size === 0) {
         throw new Error('Invalid USDZ file: ZIP archive is empty');
     }
-    
+
     // Find root USD file
     const rootUsdFile = findRootUsdFile(entries);
     if (!rootUsdFile) {
         throw new Error('Invalid USDZ file: No USD file found in archive');
     }
-    
+
     // Extract root USD file
     const rootEntry = entries.get(rootUsdFile);
     if (!rootEntry) {
         throw new Error(`USDZ file entry not found: ${rootUsdFile}`);
     }
-    
+
     const rootData = await extractZipEntry(data, rootEntry);
-    
+
     // Parse the root USD file (auto-detect format)
     const identifier = opts.identifier || rootUsdFile;
-    
+
     if (isUsdcContent(rootData)) {
         // Binary USDC format
         return parseUsdcToLayer(rootData, { identifier });
@@ -269,7 +269,7 @@ export async function parseUsdzToLayer(
 export function isUsdzContent(buffer: ArrayBuffer | Uint8Array): boolean {
     const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     if (data.length < 4) return false;
-    
+
     // Check for ZIP magic header "PK" (0x50 0x4B)
     return data[0] === 0x50 && data[1] === 0x4B;
 }

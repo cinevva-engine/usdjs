@@ -14,6 +14,18 @@ function tupleArityForElementType(elementType: string): { n: 2 | 3 | 4; kind: 'f
     if (elementType === 'quatd') return { n: 4, kind: 'f64' };
     if (elementType === 'quatf' || elementType === 'quath') return { n: 4, kind: 'f32' };
 
+    // USD core tuple types are commonly authored as `float3` / `double3` (not `vec3f`).
+    if (elementType === 'float2') return { n: 2, kind: 'f32' };
+    if (elementType === 'float3') return { n: 3, kind: 'f32' };
+    if (elementType === 'float4') return { n: 4, kind: 'f32' };
+    // Half tuple types are authored as `halfN` but we store numeric arrays as float32.
+    if (elementType === 'half2') return { n: 2, kind: 'f32' };
+    if (elementType === 'half3') return { n: 3, kind: 'f32' };
+    if (elementType === 'half4') return { n: 4, kind: 'f32' };
+    if (elementType === 'double2') return { n: 2, kind: 'f64' };
+    if (elementType === 'double3') return { n: 3, kind: 'f64' };
+    if (elementType === 'double4') return { n: 4, kind: 'f64' };
+
     const m = /([234])([fd])$/.exec(elementType);
     if (m) {
         const n = Number(m[1]) as 2 | 3 | 4;
@@ -57,6 +69,14 @@ export function parseUsdaToLayer(src: string, opts: UsdaParseOptions = {}): SdfL
     const lexer = new UsdaLexer(src, { emitNewlines: false, emitNumberStrings: false });
     const p = new Parser(lexer, layer);
     p.parseLayer();
+
+    // Minimal validation to match usdcat behavior on known-invalid corpus files.
+    // usdcat rejects non-positive framesPerSecond.
+    const fps = (layer.metadata as any)?.framesPerSecond;
+    if (typeof fps === 'number' && Number.isFinite(fps) && fps <= 0) {
+        throw new Error(`Invalid framesPerSecond: ${fps}`);
+    }
+
     return layer;
 }
 
@@ -126,6 +146,24 @@ class Parser {
                 continue;
             }
 
+            // Property order statement: `reorder properties = ["a", "b"]`
+            // Represent as prim.metadata.propertyOrder to match how USDC surfaces this info.
+            if (this.isKind('identifier') && this.tok.value === 'reorder') {
+                this.next();
+                if (this.isKind('identifier') && this.tok.value === 'properties') {
+                    this.next();
+                    if (this.isPunct('=')) {
+                        this.next();
+                        const order = this.parseValue({ baseType: 'token', isArrayType: true });
+                        if (!prim.metadata) prim.metadata = {};
+                        (prim.metadata as any).propertyOrder = order;
+                        // Optional trailing metadata block not expected here; continue.
+                        continue;
+                    }
+                }
+                // Fallback: if malformed, keep scanning.
+            }
+
             // Variant sets: variantSet "name" = { "variant" { ... } ... }
             if (this.isKind('identifier') && this.tok.value === 'variantSet') {
                 this.parseVariantSetInto(prim, primPath);
@@ -134,16 +172,25 @@ class Parser {
 
             // Property assignment: <type> <name> = <value>
             if (this.isKind('identifier')) {
-                // Optional variability or "custom" qualifier.
-                // We keep these as metadata for now; they will become first-class later.
-                let qualifier: string | null = null;
-                if (this.tok.value === 'uniform' || this.tok.value === 'varying' || this.tok.value === 'custom') {
-                    qualifier = this.tok.value;
+                // Optional property qualifiers.
+                // - `custom` is a boolean in Sdf (not a variability qualifier).
+                // - `uniform|varying` are variability qualifiers.
+                //
+                // We store these in metadata for now for parity with USDC parsing:
+                // - `custom` -> metadata.custom = true
+                // - `uniform|varying` -> metadata.qualifier = token
+                let variabilityQualifier: 'uniform' | 'varying' | null = null;
+                let isCustom = false;
+                // USD can have multiple qualifiers, e.g. `custom uniform vector3d ...`
+                // Consume them in a loop before reading the type name.
+                while (this.isKind('identifier') && (this.tok.value === 'custom' || this.tok.value === 'uniform' || this.tok.value === 'varying')) {
+                    if (this.tok.value === 'custom') isCustom = true;
+                    else variabilityQualifier = this.tok.value; // last one wins; typical files only have one
                     this.next();
-                    if (!this.isKind('identifier')) {
-                        // malformed; fall back to skipping
-                        continue;
-                    }
+                }
+                if (!this.isKind('identifier')) {
+                    // malformed; fall back to skipping
+                    continue;
                 }
 
                 const { typeName: typeTok, baseType, isArrayType } = this.readTypeName();
@@ -181,7 +228,8 @@ class Parser {
                                     timeSamples,
                                     metadata: {},
                                 };
-                                if (qualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: qualifier } };
+                                if (variabilityQualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: variabilityQualifier } };
+                                if (isCustom) spec.metadata = { ...(spec.metadata ?? {}), custom: true };
                                 if (!prim.properties) prim.properties = new Map();
                                 prim.properties.set(propName, spec);
                             }
@@ -199,7 +247,8 @@ class Parser {
                             defaultValue: value,
                             metadata: {},
                         };
-                        if (qualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: qualifier } };
+                        if (variabilityQualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: variabilityQualifier } };
+                        if (isCustom) spec.metadata = { ...(spec.metadata ?? {}), custom: true };
                         if (!prim.properties) prim.properties = new Map();
                         prim.properties.set(propKey, spec);
 
@@ -218,7 +267,8 @@ class Parser {
                         // defaultValue is undefined for declarations without values
                         metadata: {},
                     };
-                    if (qualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: qualifier } };
+                    if (variabilityQualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: variabilityQualifier } };
+                    if (isCustom) spec.metadata = { ...(spec.metadata ?? {}), custom: true };
                     if (!prim.properties) prim.properties = new Map();
                     prim.properties.set(propKey, spec);
 
@@ -254,6 +304,43 @@ class Parser {
                 const q = this.parsePackedQuatScalar(bt);
                 if (q) return q;
             }
+
+            // Tuple scalar values: preserve float-vs-double intent for common tuple types (float3/double3/etc).
+            // This matters for matching USDC semantics (float is float32).
+            const tupleInfo = tupleArityForElementType(bt);
+            if (tupleInfo) {
+                this.expectPunct('(', 'Expected "("');
+                const nums: number[] = [];
+                while (!this.isKind('eof') && !this.isPunct(')')) {
+                    if (this.isPunct(',')) {
+                        this.next();
+                        continue;
+                    }
+                    // Expect a number token for these tuple scalar types.
+                    // If input is malformed, fall back to parsing a full value and try coercion.
+                    const n = this.readNumberTokenFast();
+                    if (typeof n === 'number') {
+                        nums.push(n);
+                    } else {
+                        const v = this.parseValue();
+                        nums.push(typeof v === 'number' ? v : 0);
+                    }
+                    if (this.isPunct(',')) this.next();
+                }
+                this.expectPunct(')', 'Expected ")"');
+
+                // Normalize to float32 when the type is float-based.
+                if (tupleInfo.kind === 'f32') {
+                    const f32 = nums.map((x) => new Float32Array([x])[0]);
+                    const n = tupleInfo.n;
+                    if (n === 2) return { type: 'vec2f', value: f32.slice(0, 2) };
+                    if (n === 3) return { type: 'vec3f', value: f32.slice(0, 3) };
+                    return { type: 'vec4f', value: f32.slice(0, 4) };
+                }
+
+                // For doubles, keep the existing tuple shape.
+                return { type: 'tuple', value: nums };
+            }
         }
 
         // Tuples: (a, b, c)
@@ -269,6 +356,11 @@ class Parser {
         if (this.isKind('string')) {
             const v = this.tok.value;
             this.next();
+            // Tokens in USDA are often authored as quoted strings (e.g. `token foo = "bar"`).
+            // Preserve token-ness when the declared type is token.
+            if (ctx && !ctx.isArrayType && ctx.baseType === 'token') {
+                return { type: 'token', value: v };
+            }
             return v;
         }
 
@@ -276,16 +368,36 @@ class Parser {
             const tok = this.tok;
             this.next();
             const n = tok.numberValue;
-            if (typeof n === 'number' && Number.isFinite(n)) return n;
+            if (typeof n === 'number' && Number.isFinite(n)) {
+                if (ctx && !ctx.isArrayType && ctx.baseType === 'bool') {
+                    // usdcat may print bools as 0/1.
+                    return n !== 0;
+                }
+                // Respect scalar float typing (usdcat prints rounded floats; USDC stores float32).
+                if (ctx && !ctx.isArrayType && ctx.baseType === 'float') {
+                    return new Float32Array([n])[0];
+                }
+                return n;
+            }
             // Fallback: allocate only if needed.
             if (typeof tok.spanStart === 'number' && typeof tok.spanEnd === 'number') {
                 const s = this.lexer.slice(tok.spanStart, tok.spanEnd);
                 const nn = Number(s);
-                return Number.isFinite(nn) ? nn : s;
+                if (Number.isFinite(nn)) {
+                    if (ctx && !ctx.isArrayType && ctx.baseType === 'bool') return nn !== 0;
+                    if (ctx && !ctx.isArrayType && ctx.baseType === 'float') return new Float32Array([nn])[0];
+                    return nn;
+                }
+                return s;
             }
             const s = tok.value;
             const nn = Number(s);
-            return Number.isFinite(nn) ? nn : s;
+            if (Number.isFinite(nn)) {
+                if (ctx && !ctx.isArrayType && ctx.baseType === 'bool') return nn !== 0;
+                if (ctx && !ctx.isArrayType && ctx.baseType === 'float') return new Float32Array([nn])[0];
+                return nn;
+            }
+            return s;
         }
 
         if (this.isKind('path')) {
@@ -300,6 +412,11 @@ class Parser {
                 const args = this.isPunct('(') ? this.parseParenArgList() : null;
                 const base: any = { type: 'reference', assetPath, targetPath, __fromIdentifier: this.layer.identifier };
                 return args ? { ...base, ...args } : base;
+            }
+            // If this is an authored `asset` value, a following `( ... )` is property metadata,
+            // not an argument list attached to the asset path.
+            if (ctx && !ctx.isArrayType && ctx.baseType === 'asset') {
+                return { type: 'asset', value: assetPath, __fromIdentifier: this.layer.identifier } as any;
             }
             const args = this.isPunct('(') ? this.parseParenArgList() : null;
             // If an arg list follows an asset path, treat it as a (non-targeted) reference-style object.
@@ -321,6 +438,7 @@ class Parser {
             this.next();
             if (v === 'true') return true;
             if (v === 'false') return false;
+            if (v === 'None') return null;
             return { type: 'token', value: v };
         }
 
@@ -775,6 +893,20 @@ class Parser {
                 continue;
             }
 
+            if (this.isKind('identifier') && this.tok.value === 'reorder') {
+                this.next();
+                if (this.isKind('identifier') && this.tok.value === 'properties') {
+                    this.next();
+                    if (this.isPunct('=')) {
+                        this.next();
+                        const order = this.parseValue({ baseType: 'token', isArrayType: true });
+                        if (!prim.metadata) prim.metadata = {};
+                        (prim.metadata as any).propertyOrder = order;
+                        continue;
+                    }
+                }
+            }
+
             // Variant sets
             if (this.isKind('identifier') && this.tok.value === 'variantSet') {
                 this.parseVariantSetInto(prim, childPath);
@@ -783,12 +915,14 @@ class Parser {
 
             // Property assignment
             if (this.isKind('identifier')) {
-                let qualifier: string | null = null;
-                if (this.tok.value === 'uniform' || this.tok.value === 'varying' || this.tok.value === 'custom') {
-                    qualifier = this.tok.value;
+                let variabilityQualifier: 'uniform' | 'varying' | null = null;
+                let isCustom = false;
+                while (this.isKind('identifier') && (this.tok.value === 'custom' || this.tok.value === 'uniform' || this.tok.value === 'varying')) {
+                    if (this.tok.value === 'custom') isCustom = true;
+                    else variabilityQualifier = this.tok.value;
                     this.next();
-                    if (!this.isKind('identifier')) continue;
                 }
+                if (!this.isKind('identifier')) continue;
 
                 const { typeName: typeTok, baseType, isArrayType } = this.readTypeName();
 
@@ -822,7 +956,8 @@ class Parser {
                                     timeSamples,
                                     metadata: {},
                                 };
-                                if (qualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: qualifier } };
+                                if (variabilityQualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: variabilityQualifier } };
+                                if (isCustom) spec.metadata = { ...(spec.metadata ?? {}), custom: true };
                                 if (!prim.properties) prim.properties = new Map();
                                 prim.properties.set(propName, spec);
                             }
@@ -839,7 +974,8 @@ class Parser {
                             defaultValue: value,
                             metadata: {},
                         };
-                        if (qualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: qualifier } };
+                        if (variabilityQualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: variabilityQualifier } };
+                        if (isCustom) spec.metadata = { ...(spec.metadata ?? {}), custom: true };
                         if (!prim.properties) prim.properties = new Map();
                         prim.properties.set(propKey, spec);
                         if (this.isPunct('(')) this.parseMetadataBlockInto(spec.metadata ?? (spec.metadata = {}));
@@ -854,7 +990,8 @@ class Parser {
                         typeName: typeTok,
                         metadata: {},
                     };
-                    if (qualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: qualifier } };
+                    if (variabilityQualifier) spec.metadata = { ...(spec.metadata ?? {}), qualifier: { type: 'token', value: variabilityQualifier } };
+                    if (isCustom) spec.metadata = { ...(spec.metadata ?? {}), custom: true };
                     if (!prim.properties) prim.properties = new Map();
                     prim.properties.set(propKey, spec);
                     if (this.isPunct('(')) this.parseMetadataBlockInto(spec.metadata ?? (spec.metadata = {}));
@@ -878,22 +1015,38 @@ class Parser {
                 continue;
             }
 
-            // Dict entries in USDA often look like: `string size = "small"`
+            // Dict entries in USDA often look like:
+            // - `string size = "small"`
+            // - `dictionary renderSettings = { ... }`
+            // - `float3 "rtx:..." = (0, 1, 0)` (quoted key when it isn't a valid identifier)
+            //
             // We parse: [optional typeName] key = value
             if (this.tok.kind === 'identifier') {
                 const first = this.tok.value;
                 this.next();
 
-                // If next is identifier, then `first` was a type name and next is key.
-                let key = first;
+                // Determine if `first` was a type name or the key.
+                // If the next token is identifier OR string, treat `first` as the type name and next as the key.
+                let key: string | null = null;
+                let valueCtx: { baseType: string; isArrayType: boolean } | null = null;
+
                 if (this.tok.kind === 'identifier') {
                     key = this.tok.value;
+                    valueCtx = { baseType: first, isArrayType: false };
                     this.next();
+                } else if (this.tok.kind === 'string') {
+                    key = this.tok.value;
+                    valueCtx = { baseType: first, isArrayType: false };
+                    this.next();
+                } else {
+                    // No explicit key token after `first`: treat `first` as the key.
+                    key = first;
+                    valueCtx = null;
                 }
 
-                if (this.isPunct('=')) {
+                if (key && this.isPunct('=')) {
                     this.next();
-                    value[key] = this.parseValue();
+                    value[key] = this.parseValue(valueCtx ?? undefined);
                     continue;
                 }
             }

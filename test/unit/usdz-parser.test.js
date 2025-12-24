@@ -19,7 +19,7 @@ function isBinaryUsdc(filePath) {
         if (buffer.length < 8) return false;
         const magic = buffer.subarray(0, 8);
         return magic[0] === 0x50 && magic[1] === 0x58 && magic[2] === 0x52 && magic[3] === 0x2D &&
-               magic[4] === 0x55 && magic[5] === 0x53 && magic[6] === 0x44 && magic[7] === 0x43;
+            magic[4] === 0x55 && magic[5] === 0x53 && magic[6] === 0x44 && magic[7] === 0x43;
     } catch {
         return false;
     }
@@ -30,7 +30,7 @@ function isBinaryUsdc(filePath) {
  */
 function findUsdzFiles(dir, files = []) {
     if (!existsSync(dir)) return files;
-    
+
     try {
         const entries = readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
@@ -65,9 +65,9 @@ console.log(`Found ${allUsdzFiles.length} USDZ files in corpus`);
 
 test('USDZ parser: validates ZIP magic header', () => {
     const invalidData = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
-    
+
     assert.ok(!isUsdzContent(invalidData), 'Invalid data should not be detected as USDZ');
-    
+
     // Valid ZIP magic
     const zipMagic = new Uint8Array([0x50, 0x4B, 0x03, 0x04]);
     assert.ok(isUsdzContent(zipMagic), 'ZIP magic header should be detected');
@@ -76,28 +76,28 @@ test('USDZ parser: validates ZIP magic header', () => {
 test('USDZ parser: parses all corpus files', async () => {
     for (const usdzPath of allUsdzFiles) {
         const fileName = path.basename(usdzPath);
-        
+
         if (!existsSync(usdzPath)) {
             console.log(`Skipping: ${fileName} not found`);
             continue;
         }
-        
+
         try {
             const buffer = readFileSync(usdzPath);
             const fileSize = buffer.length;
-            
+
             // Verify it's a USDZ file
             assert.ok(
                 isUsdzContent(buffer),
                 `${fileName}: Should be detected as USDZ content`
             );
-            
+
             // Parse it
             const stage = await UsdStage.openUSDZ(buffer, fileName);
-            
+
             assert.ok(stage, `${fileName}: Stage should be created`);
             assert.ok(stage.rootLayer, `${fileName}: Stage should have root layer`);
-            
+
             // Try to list paths - may fail for files with variant sets
             let paths;
             try {
@@ -118,10 +118,10 @@ test('USDZ parser: parses all corpus files', async () => {
         } catch (e) {
             // Some files may have USDA parsing issues (not USDZ extraction issues)
             // USDZ extraction worked (ZIP was parsed), but USDA parsing failed
-            if (e.message && (e.message.includes('Unterminated') || 
-                              e.message.includes('parse') ||
-                              e.message.includes('Expected') ||
-                              e.message.includes('Invalid prim identifier'))) {
+            if (e.message && (e.message.includes('Unterminated') ||
+                e.message.includes('parse') ||
+                e.message.includes('Expected') ||
+                e.message.includes('Invalid prim identifier'))) {
                 console.log(`  ⚠ ${fileName}: USDA parsing issue - ${e.message.split('\n')[0]}`);
                 // USDZ extraction worked, but USDA parsing failed - this is acceptable
                 // The USDZ parser successfully extracted the ZIP and found the root USD file
@@ -139,17 +139,17 @@ test('USDZ parser: opens McUsd.usdz', async () => {
         console.log('Skipping: McUsd.usdz not found');
         return;
     }
-    
+
     const buffer = readFileSync(usdzPath);
     const stage = await UsdStage.openUSDZ(buffer, 'McUsd.usdz');
-    
+
     assert.ok(stage, 'Stage should be created');
     assert.ok(stage.rootLayer, 'Stage should have root layer');
-    
+
     const paths = stage.listPrimPaths();
     assert.ok(paths.length > 0, 'Stage should have prims');
     assert.ok(paths.includes('/'), 'Stage should have root path');
-    
+
     console.log(`Parsed ${paths.length} prim paths from McUsd.usdz`);
 });
 
@@ -158,21 +158,21 @@ test('USDZ parser: performance benchmark', async () => {
         console.log('Skipping: No USDZ files found');
         return;
     }
-    
+
     const results = [];
-    
+
     for (const usdzPath of allUsdzFiles.slice(0, 3)) { // Test first 3 files
         const fileName = path.basename(usdzPath);
-        
+
         if (!existsSync(usdzPath)) continue;
-        
+
         try {
             const buffer = readFileSync(usdzPath);
             const fileSize = buffer.length;
-            
+
             // Warmup
             await UsdStage.openUSDZ(buffer, fileName);
-            
+
             // Benchmark
             const iterations = 3;
             const start = performance.now();
@@ -180,10 +180,10 @@ test('USDZ parser: performance benchmark', async () => {
                 await UsdStage.openUSDZ(buffer, fileName);
             }
             const elapsed = performance.now() - start;
-            
+
             const avgMs = elapsed / iterations;
             const throughputMBps = (fileSize / 1024 / 1024) / (avgMs / 1000);
-            
+
             results.push({
                 file: fileName,
                 sizeKB: (fileSize / 1024).toFixed(1),
@@ -192,17 +192,17 @@ test('USDZ parser: performance benchmark', async () => {
             });
         } catch (e) {
             // Some files may have USDA parsing issues (not USDZ extraction issues)
-            if (e.message && (e.message.includes('Invalid prim identifier') || 
-                              e.message.includes('Unterminated') || 
-                              e.message.includes('parse') ||
-                              e.message.includes('Expected'))) {
+            if (e.message && (e.message.includes('Invalid prim identifier') ||
+                e.message.includes('Unterminated') ||
+                e.message.includes('parse') ||
+                e.message.includes('Expected'))) {
                 console.log(`  ⚠ ${fileName}: USDA parsing issue - skipping performance test`);
             } else {
                 console.error(`  ✗ ${fileName}: Performance test failed - ${e.message}`);
             }
         }
     }
-    
+
     // Print results
     console.log('\nPerformance results:');
     for (const r of results) {

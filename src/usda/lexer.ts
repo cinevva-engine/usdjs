@@ -77,8 +77,8 @@ export class UsdaLexer {
             return { kind: 'newline', value: '\n', offset, line, col };
         }
 
-        // Strings: "..."
-        if (ch === '"') {
+        // Strings: "..." or '...'
+        if (ch === '"' || ch === "'") {
             const value = this.readString();
             return { kind: 'string', value, offset, line, col };
         }
@@ -155,17 +155,19 @@ export class UsdaLexer {
     private readString(): string {
         const src = this.src;
         const len = src.length;
-        // supports "..." and triple-quoted """..."""
-        if (src.slice(this.i, this.i + 3) === '"""') {
+        // supports "..." and triple-quoted """...""" / '''...'''
+        if (src.slice(this.i, this.i + 3) === '"""' || src.slice(this.i, this.i + 3) === "'''") {
             const start = this.i;
             const contentStart = start + 3;
-            const end = src.indexOf('"""', contentStart);
+            const delim = src.slice(this.i, this.i + 3);
+            const end = src.indexOf(delim, contentStart);
             if (end === -1) throw new Error(`Unterminated triple-quoted string at ${this.line}:${this.col}`);
             this.advance(end + 3 - start);
             return src.slice(contentStart, end);
         }
 
-        // normal quoted string, minimal escapes
+        // normal quoted string, minimal escapes (supports "..." and '...')
+        const quote = src[this.i]!;
         this.advance(1); // consume opening quote
         const startContent = this.i;
         let startSlice = startContent;
@@ -173,7 +175,7 @@ export class UsdaLexer {
 
         while (this.i < len) {
             const ch = src[this.i]!;
-            if (ch === '"') {
+            if (ch === quote) {
                 const end = this.i;
                 this.advance(1);
                 if (!parts) return src.slice(startContent, end);
