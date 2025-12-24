@@ -127,3 +127,5 @@ console.log(`Paths:    ${pathsPercent.toFixed(1)}%`);
 console.log(`Metadata: ${metadataPercent.toFixed(1)}%`);
 console.log(`Other:    ${otherPercent.toFixed(1)}%`);
 
+
+

@@ -110,3 +110,5 @@ console.log(`\nTo identify specific hot spots, run with:`);
 console.log(`  node --cpu-prof --cpu-prof-dir=/tmp usdc-profile.mjs ${filePath}`);
 console.log(`Then analyze the .cpuprofile file with Chrome DevTools or clinic.js`);
 
+
+
