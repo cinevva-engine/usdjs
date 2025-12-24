@@ -6,6 +6,134 @@ export interface UsdcParseOptions {
 }
 
 /**
+ * Internal / test helpers (NOT part of the stable public API).
+ *
+ * These exist to validate our decoding against Pixar/OpenUSD's reference crate implementation.
+ */
+export function __usdcTest_parseValueRep(valueRep: bigint): {
+    payload: bigint;
+    type: number;
+    flags: number;
+    isArray: boolean;
+    isInlined: boolean;
+    isCompressed: boolean;
+    isArrayEdit: boolean;
+    inlineValue: number;
+    offset: number;
+} {
+    // Pixar: ValueRep layout (pxr/usd/sdf/crateFile.h)
+    // - payload: low 48 bits
+    // - type: bits 48..55
+    // - flags: bits 56..63
+    const payload = valueRep & ((1n << 48n) - 1n);
+    const type = Number((valueRep >> 48n) & 0xFFn);
+    const flags = Number((valueRep >> 56n) & 0xFFn);
+    return {
+        payload,
+        type,
+        flags,
+        isArray: (flags & 0x80) !== 0,
+        isInlined: (flags & 0x40) !== 0,
+        isCompressed: (flags & 0x20) !== 0,
+        isArrayEdit: (flags & 0x10) !== 0,
+        inlineValue: Number(payload & 0xFFFFFFFFn),
+        offset: Number(payload),
+    };
+}
+
+export function __usdcTest_decodeTimeSamplesLayout(opts: {
+    data: Uint8Array;
+    offset: number;
+    decodeValueRep: (rep: bigint) => any;
+}): Map<number, any> {
+    const { data, offset, decodeValueRep } = opts;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    // Mirror crateFile.cpp: TimeSamples read layout (two relative offsets + timesRep + values reps).
+    const p0 = offset;
+    const rel1 = Number(view.getBigInt64(p0, true));
+    const pTimes = p0 + rel1;
+    const timesRep = view.getBigUint64(pTimes, true);
+    const timesVal = decodeValueRep(timesRep);
+
+    const times: number[] =
+        timesVal && typeof timesVal === 'object' && timesVal.type === 'typedArray'
+            ? Array.from(timesVal.value as any)
+            : Array.isArray(timesVal) ? timesVal : [];
+
+    const pOffset2 = pTimes + 8;
+    const rel2 = Number(view.getBigInt64(pOffset2, true));
+    const pValues = pOffset2 + rel2;
+    const numValues = Number(view.getBigUint64(pValues, true));
+    const repsStart = pValues + 8;
+
+    const out = new Map<number, any>();
+    const n = Math.min(times.length, numValues);
+    for (let i = 0; i < n; i++) {
+        const vr = view.getBigUint64(repsStart + i * 8, true);
+        out.set(times[i]!, decodeValueRep(vr));
+    }
+    return out;
+}
+
+export function __usdcTest_decodeCompressedFloatArray(opts: {
+    element: 'float' | 'double';
+    data: Uint8Array;
+    base: number; // points at code byte ('i'/'t') for compressed arrays
+    count: number;
+}): Float32Array | Float64Array {
+    const { element, data, base, count } = opts;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const code = view.getInt8(base);
+    let p = base + 1;
+
+    if (code === 105 /* 'i' */) {
+        const compressedSize = Number(view.getBigUint64(p, true));
+        p += 8;
+        const end = p + compressedSize;
+        const comp = data.subarray(p, end);
+        const ints = decompressIntegers32Signed(comp, compressedSize, count);
+        if (element === 'float') {
+            const out = new Float32Array(count);
+            for (let i = 0; i < count; i++) out[i] = ints[i] ?? 0;
+            return out;
+        }
+        const out = new Float64Array(count);
+        for (let i = 0; i < count; i++) out[i] = ints[i] ?? 0;
+        return out;
+    }
+
+    if (code === 116 /* 't' */) {
+        const lutSize = view.getUint32(p, true);
+        p += 4;
+        if (element === 'float') {
+            const lut = new Float32Array(lutSize);
+            for (let i = 0; i < lutSize; i++) lut[i] = view.getFloat32(p + i * 4, true);
+            p += lutSize * 4;
+            const compressedSize = Number(view.getBigUint64(p, true));
+            p += 8;
+            const comp = data.subarray(p, p + compressedSize);
+            const idxs = decompressIntegers32(comp, compressedSize, count);
+            const out = new Float32Array(count);
+            for (let i = 0; i < count; i++) out[i] = lut[idxs[i] ?? 0] ?? 0;
+            return out;
+        } else {
+            const lut = new Float64Array(lutSize);
+            for (let i = 0; i < lutSize; i++) lut[i] = view.getFloat64(p + i * 8, true);
+            p += lutSize * 8;
+            const compressedSize = Number(view.getBigUint64(p, true));
+            p += 8;
+            const comp = data.subarray(p, p + compressedSize);
+            const idxs = decompressIntegers32(comp, compressedSize, count);
+            const out = new Float64Array(count);
+            for (let i = 0; i < count; i++) out[i] = lut[idxs[i] ?? 0] ?? 0;
+            return out;
+        }
+    }
+
+    return element === 'float' ? new Float32Array(0) : new Float64Array(0);
+}
+
+/**
  * Check if buffer contains USDC data by looking for magic header.
  */
 export function isUsdcContent(buffer: ArrayBuffer | Uint8Array): boolean {
@@ -1000,18 +1128,15 @@ class UsdcReader {
         //
         // Note: older revisions / some value kinds may have additional encodings; we focus on the
         // common encoding used by current USD crate files.
-        const payload = valueRep & ((1n << 48n) - 1n);
-        const type = Number((valueRep >> 48n) & 0xFFn) as ValueType;
-        const flags = Number((valueRep >> 56n) & 0xFFn);
-        const isInlined = (flags & 0x40) !== 0;
-        const isArray = (flags & 0x80) !== 0;
-        const isCompressed = (flags & 0x20) !== 0;
-
-        // For inlined values, payload contains the value (lower 32 bits used for small values)
-        const inlineValue = Number(payload & 0xFFFFFFFFn);
-
-        // For non-inlined values, payload is an offset into the file
-        const offset = Number(payload);
+        const rep = __usdcTest_parseValueRep(valueRep);
+        const payload = rep.payload;
+        const type = rep.type as ValueType;
+        const flags = rep.flags;
+        const isInlined = rep.isInlined;
+        const isArray = rep.isArray;
+        const isCompressed = rep.isCompressed;
+        const inlineValue = rep.inlineValue;
+        const offset = rep.offset;
 
         // Optional debug: dump suspicious value reps (useful when validating against usdcat).
         // Enable with: USDJS_USDC_DUMP_VALUEREP=1
@@ -1575,33 +1700,11 @@ class UsdcReader {
                 // - int64 offsetToValues (relative to this second int64)
                 // - at values location: uint64 numValues, followed by numValues contiguous ValueRep
                 if (offset <= 0 || offset + 8 > this.data.length) return new Map() as any;
-                const p0 = offset;
-                const rel1 = Number(this.view.getBigInt64(p0, true));
-                const pTimes = p0 + rel1;
-                if (!Number.isFinite(rel1) || pTimes < 0 || pTimes + 8 > this.data.length) return new Map() as any;
-                const timesRep = this.view.getBigUint64(pTimes, true);
-                const timesVal: any = this.decodeValueRep(timesRep);
-                const times: number[] =
-                    timesVal && typeof timesVal === 'object' && timesVal.type === 'typedArray'
-                        ? Array.from(timesVal.value as any)
-                        : Array.isArray(timesVal) ? timesVal : [];
-
-                const pOffset2 = pTimes + 8;
-                if (pOffset2 + 8 > this.data.length) return new Map() as any;
-                const rel2 = Number(this.view.getBigInt64(pOffset2, true));
-                const pValues = pOffset2 + rel2;
-                if (!Number.isFinite(rel2) || pValues < 0 || pValues + 8 > this.data.length) return new Map() as any;
-                const numValues = Number(this.view.getBigUint64(pValues, true));
-                const repsStart = pValues + 8;
-                if (!Number.isFinite(numValues) || numValues < 0 || repsStart + numValues * 8 > this.data.length) return new Map() as any;
-
-                const map = new Map<number, SdfValue>();
-                const n = Math.min(times.length, numValues);
-                for (let i = 0; i < n; i++) {
-                    const vr = this.view.getBigUint64(repsStart + i * 8, true);
-                    map.set(times[i]!, this.decodeValueRep(vr));
-                }
-                return map as any;
+                return __usdcTest_decodeTimeSamplesLayout({
+                    data: this.data,
+                    offset,
+                    decodeValueRep: (rep) => this.decodeValueRep(rep),
+                }) as any;
             }
 
             case ValueType.DoubleVector: {
