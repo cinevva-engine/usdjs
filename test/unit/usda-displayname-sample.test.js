@@ -174,12 +174,8 @@ test('displayName sample: parse and verify features', () => {
   const refinementEnable = sphere.properties?.get('refinementEnableOverride');
   console.log('refinementEnableOverride property:', refinementEnable);
   assert.ok(refinementEnable, 'refinementEnableOverride should exist');
-  // Check if custom qualifier is stored in metadata
-  const customQualifier = refinementEnable.metadata?.qualifier;
-  console.log('custom qualifier:', customQualifier);
-  assert.ok(customQualifier, 'custom qualifier should be stored');
-  assert.strictEqual(customQualifier?.type, 'token');
-  assert.strictEqual(customQualifier?.value, 'custom');
+  // `custom` is represented as a boolean metadata flag (usdcat does not serialize custom=false).
+  assert.strictEqual(refinementEnable.metadata?.custom, true);
   
   const refinementLevel = sphere.properties?.get('refinementLevel');
   assert.ok(refinementLevel, 'refinementLevel should exist');

@@ -150,7 +150,7 @@ class Parser {
             // Represent as prim.metadata.propertyOrder to match how USDC surfaces this info.
             if (this.isKind('identifier') && this.tok.value === 'reorder') {
                 this.next();
-                if (this.isKind('identifier') && this.tok.value === 'properties') {
+                if (this.isKind('identifier') && (this.tok.value as string) === 'properties') {
                     this.next();
                     if (this.isPunct('=')) {
                         this.next();
@@ -895,7 +895,7 @@ class Parser {
 
             if (this.isKind('identifier') && this.tok.value === 'reorder') {
                 this.next();
-                if (this.isKind('identifier') && this.tok.value === 'properties') {
+                if (this.isKind('identifier') && (this.tok.value as string) === 'properties') {
                     this.next();
                     if (this.isPunct('=')) {
                         this.next();

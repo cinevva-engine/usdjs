@@ -52,7 +52,7 @@ def Xform "World" {
     assert.ok(world);
 
     // root strongest wins for purpose
-    assert.deepEqual(world.properties.get('purpose').defaultValue, 'proxy');
+    assert.deepEqual(world.properties.get('purpose').defaultValue, { type: 'token', value: 'proxy' });
     // but we still see weaker-layer additions like /World/Geom and kind
     assert.ok(composed.getPrim(SdfPath.parse('/World/Geom')));
     assert.deepEqual(world.properties.get('kind').defaultValue, { type: 'token', value: 'component' });

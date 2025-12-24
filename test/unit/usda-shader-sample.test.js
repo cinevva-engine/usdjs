@@ -118,12 +118,13 @@ test('shader sample: parse and verify structure', () => {
   const uniformQualifier = infoId.metadata?.qualifier;
   assert.ok(uniformQualifier, 'uniform qualifier should be stored');
   assert.strictEqual(uniformQualifier?.value, 'uniform');
-  assert.strictEqual(infoId.defaultValue, 'UsdPreviewSurface');
+  assert.deepEqual(infoId.defaultValue, { type: 'token', value: 'UsdPreviewSurface' });
 
   // Check shader inputs
   const diffuseColor = shader.properties?.get('inputs:diffuseColor');
   assert.ok(diffuseColor, 'inputs:diffuseColor should exist');
-  assert.strictEqual(diffuseColor.defaultValue?.type, 'tuple');
+  // We normalize float3/color3f as vec3f for parity with USDC and usdcat.
+  assert.strictEqual(diffuseColor.defaultValue?.type, 'vec3f');
   const diffuseValue = diffuseColor.defaultValue?.value;
   assert.ok(diffuseValue && diffuseValue.length === 3, 'diffuseColor should be color3f tuple');
   console.log('diffuseColor value:', diffuseValue);
