@@ -96,3 +96,4 @@ In `usdjs`, we implement the same format for `float[]` and `double[]` and valida
 - Some `TypeEnum` cases not exercised by our corpus are not fully implemented (e.g. `Spline`, `Relocates`, etc.).
 
 
+
