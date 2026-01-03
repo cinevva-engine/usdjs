@@ -29,7 +29,14 @@ export type SdfValue =
      * - `point3f[]`, `normal3f[]`, `texCoord2f[]`, etc (packed as flat arrays)
      */
     | { type: 'typedArray'; elementType: string; value: Float32Array | Float64Array | Int32Array | Uint32Array }
-    | { type: 'dict'; value: Record<string, SdfValue> };
+    | { type: 'dict'; value: Record<string, SdfValue> }
+    /**
+     * Raw/opaque value for round-trip preservation.
+     * 
+     * Used when we encounter USD constructs we don't fully understand but want to
+     * preserve for serialization. The raw string is written verbatim to USDA output.
+     */
+    | { type: 'raw'; value: string };
 
 export type SdfPrimSpecifier = 'def' | 'over' | 'class';
 
@@ -58,10 +65,23 @@ export interface SdfPrimSpec {
 }
 
 /**
+ * Minimal layer surface used by the viewer/runtime.
+ *
+ * We expose this as an interface so we can return structural-sharing layer views
+ * without materializing/cloning full prim graphs.
+ */
+export interface SdfLayerLike {
+    identifier: string;
+    metadata: Record<string, SdfValue>;
+    root: SdfPrimSpec;
+    getPrim(path: SdfPath): SdfPrimSpec | null;
+}
+
+/**
  * Minimal in-memory layer model.
  * Eventually we will need a richer "spec" model closer to Pixar Sdf.
  */
-export class SdfLayer {
+export class SdfLayer implements SdfLayerLike {
     /** Layer-level metadata (e.g. defaultPrim, upAxis). */
     readonly metadata: Record<string, SdfValue> = {};
     readonly root: SdfPrimSpec;

@@ -1,11 +1,22 @@
+import type { SdfLayer } from '../sdf/layer.js';
+
+export interface UsdResolverResult {
+    identifier: string;
+    /** USDA text content (used if `layer` is not provided) */
+    text?: string;
+    /** Pre-parsed layer (avoids re-parsing when loading binary formats like USDC) */
+    layer?: SdfLayer;
+}
+
 export interface UsdResolver {
     /**
-     * Read a USDA layer by asset path.
+     * Read a USD layer by asset path.
      *
      * - `assetPath` can be relative to the requesting layer.
      * - Return `identifier` should be a stable, canonical ID for caching (e.g. resolved absolute path).
+     * - Can return either `text` (USDA to be parsed) or `layer` (pre-parsed, e.g. from USDC).
      */
-    readText(assetPath: string, fromIdentifier?: string): Promise<{ identifier: string; text: string }>;
+    readText(assetPath: string, fromIdentifier?: string): Promise<UsdResolverResult>;
 }
 
 /**

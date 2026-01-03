@@ -797,25 +797,47 @@ class UsdcReader {
         const numEncodedPaths = Number(this.readUint64());
         if (numEncodedPaths === 0) return;
 
-        // Read compressed pathIndexes
+        // Read (possibly compressed) pathIndexes.
+        // Note: OpenUSD crates typically store these using integer compression, but for robustness
+        // (and to allow authoring minimal crates), we also support an uncompressed fallback when
+        // compressedSize==0 by reading raw uint32 arrays.
         let compressedSize = Number(this.readUint64());
-        const pathIndexes = compressedSize > 0
-            ? decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, numEncodedPaths)
-            : new Uint32Array(0);
-        this.offset += compressedSize;
+        let pathIndexes: Uint32Array;
+        if (compressedSize > 0) {
+            pathIndexes = decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, numEncodedPaths);
+            this.offset += compressedSize;
+        } else {
+            pathIndexes = new Uint32Array(numEncodedPaths);
+            for (let i = 0; i < numEncodedPaths; i++) {
+                pathIndexes[i] = this.readUint32();
+            }
+        }
 
-        // Read compressed elementTokenIndexes
+        // Read (possibly compressed) elementTokenIndexes.
         compressedSize = Number(this.readUint64());
-        const elementTokenIndexes = compressedSize > 0
-            ? new Int32Array(decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, numEncodedPaths).buffer)
-            : new Int32Array(0);
-        this.offset += compressedSize;
+        let elementTokenIndexes: Int32Array;
+        if (compressedSize > 0) {
+            elementTokenIndexes = new Int32Array(decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, numEncodedPaths).buffer);
+            this.offset += compressedSize;
+        } else {
+            elementTokenIndexes = new Int32Array(numEncodedPaths);
+            for (let i = 0; i < numEncodedPaths; i++) {
+                elementTokenIndexes[i] = this.readInt32();
+            }
+        }
 
-        // Read compressed jumps
+        // Read (possibly compressed) jumps.
         compressedSize = Number(this.readUint64());
-        const jumps = compressedSize > 0
-            ? new Int32Array(decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, numEncodedPaths).buffer)
-            : new Int32Array(0);
+        let jumps: Int32Array;
+        if (compressedSize > 0) {
+            jumps = new Int32Array(decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, numEncodedPaths).buffer);
+            this.offset += compressedSize;
+        } else {
+            jumps = new Int32Array(numEncodedPaths);
+            for (let i = 0; i < numEncodedPaths; i++) {
+                jumps[i] = this.readInt32();
+            }
+        }
 
         // Build decompressed paths using the jump table
         this.buildDecompressedPaths(pathIndexes, elementTokenIndexes, jumps);
@@ -986,25 +1008,42 @@ class UsdcReader {
         const count = Number(this.readUint64());
         if (count === 0) return;
 
-        // Read compressed pathIndexes
+        // Read (possibly compressed) spec arrays.
+        // Like PATHS, support an uncompressed fallback (compressedSize==0) for robustness and
+        // minimal authored crates.
+
+        // Path indexes
         let compressedSize = Number(this.readUint64());
-        const pathIndexes = compressedSize > 0
-            ? decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, count)
-            : new Uint32Array(count);
-        this.offset += compressedSize;
+        let pathIndexes: Uint32Array;
+        if (compressedSize > 0) {
+            pathIndexes = decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, count);
+            this.offset += compressedSize;
+        } else {
+            pathIndexes = new Uint32Array(count);
+            for (let i = 0; i < count; i++) pathIndexes[i] = this.readUint32();
+        }
 
-        // Read compressed fieldSetIndexes
+        // Fieldset indexes
         compressedSize = Number(this.readUint64());
-        const fieldSetIndexes = compressedSize > 0
-            ? decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, count)
-            : new Uint32Array(count);
-        this.offset += compressedSize;
+        let fieldSetIndexes: Uint32Array;
+        if (compressedSize > 0) {
+            fieldSetIndexes = decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, count);
+            this.offset += compressedSize;
+        } else {
+            fieldSetIndexes = new Uint32Array(count);
+            for (let i = 0; i < count; i++) fieldSetIndexes[i] = this.readUint32();
+        }
 
-        // Read compressed specTypes
+        // Spec types
         compressedSize = Number(this.readUint64());
-        const specTypes = compressedSize > 0
-            ? decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, count)
-            : new Uint32Array(count);
+        let specTypes: Uint32Array;
+        if (compressedSize > 0) {
+            specTypes = decompressIntegers32(this.data.subarray(this.offset, this.offset + compressedSize), compressedSize, count);
+            this.offset += compressedSize;
+        } else {
+            specTypes = new Uint32Array(count);
+            for (let i = 0; i < count; i++) specTypes[i] = this.readUint32();
+        }
 
         // Build specs array
         this.specs = [];
@@ -1055,6 +1094,10 @@ class UsdcReader {
                         } else {
                             (layer.metadata as Record<string, SdfValue>)[name] = value;
                         }
+                    } else {
+                        // Preserve unknown/extra layer metadata keys (lossless round-trip).
+                        // This is important for custom authoring metadata and for full ValueType coverage tests.
+                        (layer.metadata as Record<string, SdfValue>)[name] = value;
                     }
                 }
             } else if (spec.specType === SpecType.Prim) {
@@ -1615,11 +1658,6 @@ class UsdcReader {
                 return 'def';
             }
 
-            case ValueType.Specifier: {
-                const spec = inlineValue & 0xFF;
-                return spec === 0 ? 'def' : spec === 1 ? 'over' : 'class';
-            }
-
             case ValueType.Variability: {
                 const v = inlineValue & 0xFF;
                 return v === 0 ? 'varying' : 'uniform';
@@ -1785,9 +1823,225 @@ class UsdcReader {
                 } as any;
             }
 
+            case ValueType.ReferenceListOp:
+            case ValueType.PayloadListOp: {
+                // SdfReferenceListOp / SdfPayloadListOp.
+                //
+                // These are critical for real-world assets: `prepend references = @./file.usd@`.
+                // Our use-cases (viewer + minimal composition) mostly need:
+                // - assetPath (StringIndex -> token)
+                // - optional primPath (PathIndex -> string)
+                //
+                // OpenUSD's full crate encoding for references/payloads carries additional fields
+                // (layerOffset / customData). We decode a conservative subset and skip unknown fields
+                // via a stride heuristic that works across common files.
+                if (isInlined) return { type: 'array', elementType: 'reference', value: [] } as any;
+                if (offset + 1 > this.data.length) return { type: 'array', elementType: 'reference', value: [] } as any;
+
+                let p = offset;
+                const bits = this.data[p++]!;
+                const isExplicit = (bits & 0x01) !== 0;
+                const hasExplicit = (bits & 0x02) !== 0;
+                const hasAdded = (bits & 0x04) !== 0;
+                const hasDeleted = (bits & 0x08) !== 0;
+                const hasOrdered = (bits & 0x10) !== 0;
+                const hasPrepended = (bits & 0x20) !== 0;
+                const hasAppended = (bits & 0x40) !== 0;
+
+                type ArcEntry = { assetPath: string; targetPath?: string };
+
+                const decodeStringIndexToAssetPath = (stringIndex: number): string => {
+                    const tokenIdx = this.stringIndices[stringIndex];
+                    return tokenIdx !== undefined ? (this.tokens[tokenIdx] ?? '') : '';
+                };
+
+                const decodePathIndexToPrimPath = (pathIndex: number): string => {
+                    return this.paths[pathIndex] ?? '';
+                };
+
+                const looksLikeAssetPath = (s: string): boolean => {
+                    if (!s) return false;
+                    // Most external asset refs include at least one path-ish character.
+                    // Keep this permissive to avoid rejecting odd but valid refs.
+                    return s.includes('/') || s.includes('\\') || s.includes('.') || s.startsWith('@') || s.startsWith('<');
+                };
+
+                const readArcVec = (): ArcEntry[] => {
+                    if (p + 8 > this.data.length) return [];
+                    const n = Number(this.view.getBigUint64(p, true));
+                    p += 8;
+                    if (!Number.isFinite(n) || n < 0) return [];
+                    if (n === 0) return [];
+
+                    const start = p;
+                    // Candidate per-entry sizes observed in the wild. We try to pick the one
+                    // that yields the most plausible assetPaths while still consuming exactly n entries.
+                    const strides = [8, 12, 16, 24, 32];
+
+                    let best: { stride: number; ok: number; entries: ArcEntry[] } | null = null;
+
+                    for (const stride of strides) {
+                        const need = start + n * stride;
+                        if (need > this.data.length) continue;
+
+                        const entries: ArcEntry[] = [];
+                        let ok = 0;
+                        let q = start;
+
+                        for (let i = 0; i < n; i++) {
+                            // Heuristic layout:
+                            // - u32 assetStringIndex
+                            // - u32 primPathIndex (often 0 for "no target")
+                            // - (optional extra fields depending on crate revision / value)
+                            const assetStringIndex = this.view.getUint32(q, true);
+                            const primPathIndex = this.view.getUint32(q + 4, true);
+
+                            const assetPath = decodeStringIndexToAssetPath(assetStringIndex);
+                            const primPath = decodePathIndexToPrimPath(primPathIndex);
+                            const entry: ArcEntry = { assetPath };
+
+                            // Only set targetPath when it looks like a prim path.
+                            if (primPath && (primPath.startsWith('/') || (primPath.startsWith('<') && primPath.endsWith('>')))) {
+                                entry.targetPath = primPath;
+                            }
+
+                            if (looksLikeAssetPath(assetPath)) ok++;
+                            entries.push(entry);
+                            q += stride;
+                        }
+
+                        // Prefer decodes where most entries look reasonable.
+                        // Tie-breaker: prefer smaller strides (more compact / typical crate encoding).
+                        if (!best || ok > best.ok || (ok === best.ok && stride < best.stride)) {
+                            best = { stride, ok, entries };
+                        }
+                    }
+
+                    if (!best) {
+                        // Give up without advancing (best-effort: keep stream aligned by advancing 0).
+                        return [];
+                    }
+
+                    p = start + n * best.stride;
+                    // Filter empty entries (common when decoding fails or refs are intentionally empty)
+                    return best.entries.filter((e) => e.assetPath || e.targetPath);
+                };
+
+                const explicitItems = hasExplicit ? readArcVec() : [];
+                const addedItems = hasAdded ? readArcVec() : [];
+                const deletedItems = hasDeleted ? readArcVec() : [];
+                const orderedItems = hasOrdered ? readArcVec() : [];
+                const prependedItems = hasPrepended ? readArcVec() : [];
+                const appendedItems = hasAppended ? readArcVec() : [];
+
+                // Encode into the same "listOp dict" shape that our USDA parser produces so:
+                // - serializer prints `prepend references = ...`
+                // - stage.extractArcRefs() can unwrap dict.value.value.
+                const toSdfArray = (items: ArcEntry[]): SdfValue =>
+                    ({
+                        type: 'array',
+                        elementType: 'reference',
+                        value: items.map((e) => ({
+                            type: 'reference',
+                            assetPath: e.assetPath,
+                            ...(e.targetPath ? { targetPath: e.targetPath } : null),
+                        })),
+                    }) as any;
+
+                if (isExplicit) {
+                    return toSdfArray(explicitItems);
+                }
+
+                // Prefer a single, common op when possible.
+                // Note: We don't attempt full list-op composition here; we only need enough to
+                // locate external arcs for composition.
+                const pickSingleOp = (): { op: string; items: ArcEntry[] } | null => {
+                    if (prependedItems.length && !addedItems.length && !appendedItems.length && !deletedItems.length && !orderedItems.length) {
+                        return { op: 'prepend', items: prependedItems };
+                    }
+                    if (appendedItems.length && !addedItems.length && !prependedItems.length && !deletedItems.length && !orderedItems.length) {
+                        return { op: 'append', items: appendedItems };
+                    }
+                    if (addedItems.length && !prependedItems.length && !appendedItems.length && !deletedItems.length && !orderedItems.length) {
+                        return { op: 'add', items: addedItems };
+                    }
+                    if (deletedItems.length && !addedItems.length && !prependedItems.length && !appendedItems.length && !orderedItems.length) {
+                        // We don't have a great representation for delete-only; keep as listOp for visibility.
+                        return { op: 'delete', items: deletedItems };
+                    }
+                    return null;
+                };
+
+                const single = pickSingleOp();
+                if (single) {
+                    return {
+                        type: 'dict',
+                        value: {
+                            op: { type: 'token', value: single.op },
+                            value: toSdfArray(single.items),
+                        },
+                    } as any;
+                }
+
+                // Fallback: approximate composition (union add/prepend/append, remove deleted).
+                // This is sufficient for extracting arcs, even if order isn't perfect.
+                const key = (e: ArcEntry) => `${e.assetPath}#${e.targetPath ?? ''}`;
+                const set = new Map<string, ArcEntry>();
+                for (const e of [...addedItems, ...prependedItems, ...appendedItems]) set.set(key(e), e);
+                for (const e of deletedItems) set.delete(key(e));
+                let result = Array.from(set.values());
+                if (orderedItems.length) {
+                    const orderedKeys = new Set(orderedItems.map(key));
+                    const ordered = orderedItems.filter((x) => set.has(key(x)));
+                    const rest = result.filter((x) => !orderedKeys.has(key(x)));
+                    result = [...ordered, ...rest];
+                } else {
+                    // Stable order for tests.
+                    result.sort((a, b) => key(a).localeCompare(key(b)));
+                }
+                return toSdfArray(result);
+            }
+
             case ValueType.PathVector:
             case ValueType.TokenVector: {
-                return { type: 'array', elementType: type === ValueType.PathVector ? 'sdfpath' : 'token', value: [] };
+                // Common crate encoding:
+                // - uint64 count
+                // - count * uint32 indices (path indices or token indices)
+                //
+                // We return a value compatible with our USDA shapes:
+                // - TokenVector -> {type:'array', elementType:'token', value: string[]}
+                // - PathVector  -> {type:'array', elementType:'sdfpath', value: [{type:'sdfpath',value:string}]}
+                if (isInlined) {
+                    return { type: 'array', elementType: type === ValueType.PathVector ? 'sdfpath' : 'token', value: [] };
+                }
+                if (offset + 8 > this.data.length) {
+                    return { type: 'array', elementType: type === ValueType.PathVector ? 'sdfpath' : 'token', value: [] };
+                }
+                const n = Number(this.view.getBigUint64(offset, true));
+                const base = offset + 8;
+                if (!Number.isFinite(n) || n < 0) {
+                    return { type: 'array', elementType: type === ValueType.PathVector ? 'sdfpath' : 'token', value: [] };
+                }
+                const need = base + n * 4;
+                if (need > this.data.length) {
+                    return { type: 'array', elementType: type === ValueType.PathVector ? 'sdfpath' : 'token', value: [] };
+                }
+                if (type === ValueType.TokenVector) {
+                    const vals: string[] = [];
+                    for (let i = 0; i < n; i++) {
+                        const ti = this.view.getUint32(base + i * 4, true);
+                        vals.push(this.tokens[ti] ?? '');
+                    }
+                    return { type: 'array', elementType: 'token', value: vals } as any;
+                } else {
+                    const vals: any[] = [];
+                    for (let i = 0; i < n; i++) {
+                        const pi = this.view.getUint32(base + i * 4, true);
+                        const p = this.paths[pi] ?? '';
+                        if (p) vals.push({ type: 'sdfpath', value: p });
+                    }
+                    return { type: 'array', elementType: 'sdfpath', value: vals } as any;
+                }
             }
 
             case ValueType.ValueBlock: {

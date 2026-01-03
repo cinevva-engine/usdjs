@@ -17,6 +17,24 @@ export class SdfPath {
 
     static readonly absoluteRoot = new SdfPath('prim', '/', null, null);
 
+    /**
+     * Fast prim path creation - skips validation.
+     * Use only when you KNOW the path is valid (e.g., during cloning/composition).
+     * @internal
+     */
+    static primUnsafe(absolutePrimPath: string): SdfPath {
+        return new SdfPath('prim', absolutePrimPath, null, null);
+    }
+
+    /**
+     * Fast property path creation - skips validation.
+     * Use only when you KNOW the components are valid.
+     * @internal
+     */
+    static propertyUnsafe(absolutePrimPath: string, propertyName: string, propertyField: string | null = null): SdfPath {
+        return new SdfPath('property', absolutePrimPath, propertyName, propertyField);
+    }
+
     static isValidIdentifier(name: string): boolean {
         // USD identifiers are more nuanced (namespaces, variants, etc).
         //
