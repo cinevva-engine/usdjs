@@ -31,8 +31,9 @@ export default defineConfig({
       {
         text: 'Ecosystem',
         items: [
-          { text: 'usdjs-viewer', link: 'https://github.com/cinevva-engine/usdjs-viewer' },
-          { text: 'usdjs-renderer', link: 'https://github.com/cinevva-engine/usdjs-renderer' },
+          { text: 'usdjs (Core)', link: 'https://cinevva-engine.github.io/usdjs/' },
+          { text: 'usdjs-viewer', link: 'https://cinevva-engine.github.io/usdjs-viewer/' },
+          { text: 'usdjs-renderer', link: 'https://cinevva-engine.github.io/usdjs-renderer/' },
         ]
       }
     ],

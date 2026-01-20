@@ -71,10 +71,10 @@ npm install @cinevva/usdjs
 
 <div class="ecosystem-cards">
 
-### [@cinevva/usdjs-viewer](https://github.com/cinevva-engine/usdjs-viewer)
+### [@cinevva/usdjs-viewer](https://cinevva-engine.github.io/usdjs-viewer/)
 Three.js-based browser viewer for visual validation and debugging.
 
-### [@cinevva/usdjs-renderer](https://github.com/cinevva-engine/usdjs-renderer)
+### [@cinevva/usdjs-renderer](https://cinevva-engine.github.io/usdjs-renderer/)
 Headless PNG rendering via Playwright for regression testing.
 
 </div>
