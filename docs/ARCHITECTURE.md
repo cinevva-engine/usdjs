@@ -295,4 +295,4 @@ Benchmark critical paths:
 3. **Fix the code** with the smallest possible change
 4. **Verify** against the full corpus
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
+See [CONTRIBUTING.md](https://github.com/cinevva-engine/usdjs/blob/main/CONTRIBUTING.md) for details.
