@@ -5,13 +5,13 @@
     "description": "Pure TypeScript/JavaScript OpenUSD (USD) core: USDA/USDC/USDZ parsing, minimal composition, and utilities. Browser-first, engine-agnostic.",
     "license": "MIT",
     "author": "Cinevva",
-    "homepage": "https://github.com/cinevva/usdjs#readme",
+    "homepage": "https://cinevva-engine.github.io/usdjs/",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/cinevva/usdjs.git"
+        "url": "git+https://github.com/cinevva-engine/usdjs.git"
     },
     "bugs": {
-        "url": "https://github.com/cinevva/usdjs/issues"
+        "url": "https://github.com/cinevva-engine/usdjs/issues"
     },
     "keywords": [
         "usd",
@@ -50,11 +50,15 @@
         "corpus:curate:ftlab": "npm run build && node scripts/curate-ftlab.mjs",
         "test:corpus": "npm run build && node --test test/corpus",
         "test:all": "npm run test && npm run perf && npm run test:corpus",
-        "prepublishOnly": "npm run build"
+        "prepublishOnly": "npm run build",
+        "docs:dev": "vitepress dev docs",
+        "docs:build": "vitepress build docs",
+        "docs:preview": "vitepress preview docs"
     },
     "devDependencies": {
         "unzipper": "^0.10.14",
-        "typescript": "^5.9.3"
+        "typescript": "^5.9.3",
+        "vitepress": "^1.5.0"
     },
     "publishConfig": {
         "access": "public"
