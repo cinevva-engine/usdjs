@@ -1,27 +1,36 @@
 ## `@cinevva/usdjs`
 
-`@cinevva/usdjs` is a **pure TypeScript/JavaScript** implementation of a **practical subset** of **OpenUSD (USD)** core functionality:
+A reference-quality OpenUSD implementation in pure TypeScript. We're building toward full spec correctness, verified against Pixar's source code.
 
-- **USDA** (text) parsing + serialization
-- **USDC** (“crate”, binary) parsing + *minimal* serialization
-- **USDZ** parsing + writing utilities (browser-first)
-- A small **composition layer** (“Pcp-lite”) targeting common real-world assets: sublayers, references/payloads, variants, inherits
+It parses and serializes USDA (text), USDC (binary crate), and USDZ (package) files. The composition engine handles sublayers, references, payloads, variants, and inherits. It runs in modern browsers and Node.js without native addons or WebAssembly.
 
-It runs in **modern browsers** and **Node.js** and does **not** require native addons or WebAssembly.
+### The Goal
 
-### Status (brutally honest)
+We want the definitive USD implementation for JavaScript. Not a "good enough" subset, but a correct, complete runtime you can trust for production workflows.
 
-This is **not a full OpenUSD replacement**. It is intentionally small, corpus-driven, and biased toward “works on real files” over spec-completeness.
+### How We Get There
 
-You should expect:
+**Corpus-driven development.** We test against real USD files from the USD Working Group, NVIDIA, Apple, and community assets. This keeps us focused on what actually matters while building toward completeness.
 
-- **Incomplete composition**: no full Pcp prim indexing parity, no specializes/relocates/clips/value clips.
-- **Minimal schema layer**: this is mostly **Sdf/Layers + composition + value decoding**. Typed `UsdGeom`/`UsdShade` APIs are not a goal (yet).
-- **Minimal USDC writer**: reading is the priority; writing covers common cases we need, not full authoring parity.
-- **API churn**: until 1.0, the public API may change based on real corpus findings.
-- **No security audit**: don’t use this to process untrusted files in security-sensitive contexts without sandboxing.
+**Verified against Pixar source.** Our USDC parser is cross-referenced with Pixar's C++ implementation. When there's ambiguity in behavior, we match what OpenUSD does. See `src/usdc/PIXAR_PARITY.md` for the detailed mapping.
 
-If you need “everything USD”, use Pixar’s OpenUSD (native) or a WASM build.
+**Incremental correctness.** We'd rather have fewer features that work correctly than more features that work "mostly."
+
+### Current State
+
+The core is solid. USDA and USDC parsing handles real-world files from major DCC tools. Composition covers the patterns you'll encounter in production assets.
+
+What's still in progress:
+
+**Composition completeness.** Specializes, relocates, and value clips aren't implemented yet.
+
+**Schema APIs.** Typed `UsdGeom` and `UsdShade` APIs are planned but not prioritized over core correctness.
+
+**USDC writer.** Reading is mature. Writing covers common authoring cases but isn't at full parity.
+
+**Security.** No formal audit yet. Sandbox untrusted files.
+
+The API may change before 1.0 as we expand coverage and refine based on real usage.
 
 ### Install
 
@@ -31,7 +40,7 @@ Once published:
 npm i @cinevva/usdjs
 ```
 
-Until then, you can install from GitHub:
+Until then, install from GitHub:
 
 ```bash
 npm i github:cinevva/usdjs
@@ -51,15 +60,22 @@ const layerB = parseUsdcToLayer(usdcBytes, { identifier: 'scene.usdc' });
 
 ### Documentation
 
-- **Feature / support matrix**: `docs/FEATURES.md`
-- **Format notes (USDA/USDC/USDZ)**: `docs/FORMATS.md`
-- **Composition notes**: `docs/COMPOSITION.md`
-- **Comparisons (JS vs WASM vs Three.js loaders)**: `docs/COMPARISON.md`
-- **Corpus + licensing notes**: `docs/CORPUS_AND_LICENSES.md`
-- **USDC crate parity notes**: `src/usdc/PIXAR_PARITY.md`
+The docs cover features, formats, composition details, and how this compares to other approaches:
+
+`docs/FEATURES.md` has the feature and support matrix.
+
+`docs/FORMATS.md` explains USDA, USDC, and USDZ specifics.
+
+`docs/COMPOSITION.md` covers what composition features work.
+
+`docs/COMPARISON.md` puts this in context with WASM viewers, Three.js loaders, and native tools.
+
+`docs/CORPUS_AND_LICENSES.md` explains the test files and their licenses.
+
+`src/usdc/PIXAR_PARITY.md` documents how the USDC parser maps to Pixar's reference implementation.
 
 ### License
 
-- Code: **MIT** (see `LICENSE`)
-- Test corpora: external corpora under `test/corpus/external/` remain under their **own licenses** (see `docs/CORPUS_AND_LICENSES.md`).
+Code is MIT (see `LICENSE`).
 
+Test corpora under `test/corpus/external/` remain under their own licenses. See `docs/CORPUS_AND_LICENSES.md` for details.

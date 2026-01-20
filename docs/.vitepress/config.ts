@@ -15,7 +15,8 @@ export default defineConfig({
   
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/usdjs/logo.svg' }],
-    ['meta', { name: 'theme-color', content: '#5c6bc0' }],
+    ['meta', { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#8b5cf6' }],
+    ['meta', { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#070714' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: '@cinevva/usdjs' }],
     ['meta', { property: 'og:description', content: 'Pure TypeScript/JavaScript OpenUSD implementation' }],

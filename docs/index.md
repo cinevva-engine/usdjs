@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "@cinevva/usdjs"
-  text: Pure TypeScript OpenUSD
-  tagline: Parse, compose, and serialize USD files in the browser—no WASM required.
+  text: Reference-Quality OpenUSD
+  tagline: A spec-correct USD implementation in pure TypeScript. Verified against Pixar source.
   actions:
     - theme: brand
       text: Get Started
@@ -14,18 +14,18 @@ hero:
       link: https://github.com/cinevva-engine/usdjs
 
 features:
+  - icon: 🎯
+    title: Spec-Correct
+    details: We verify behavior against Pixar's C++ implementation. When there's ambiguity, we match OpenUSD.
   - icon: 📦
     title: All USD Formats
-    details: Read USDA (text), USDC (binary crate), and USDZ (package). Write USDA and minimal USDC.
+    details: Read and write USDA (text), USDC (binary crate), and USDZ (package). No WASM required.
   - icon: 🔗
-    title: Composition Engine
-    details: Practical "Pcp-lite" supporting sublayers, references, payloads, variants, and inherits.
-  - icon: 🌐
-    title: Browser-First
-    details: Zero native dependencies. Works in modern browsers and Node.js out of the box.
+    title: Full Composition
+    details: Sublayers, references, payloads, variants, and inherits. Working toward complete Pcp parity.
   - icon: ⚡
-    title: Corpus-Driven
-    details: Validated against real-world USD files from USD-WG, NVIDIA, and community assets.
+    title: Corpus-Validated
+    details: Tested against real files from USD-WG, NVIDIA, Apple, and community assets.
 ---
 
 ## Quick Example
@@ -79,16 +79,17 @@ Headless PNG rendering via Playwright for regression testing.
 
 </div>
 
-## Honest Assessment
+## Current Progress
 
-This is **not** a full OpenUSD replacement. It's a practical subset for web applications:
+The core runtime is solid and handles production files from major DCC tools. We're actively working toward full OpenUSD parity.
 
-- ✅ Works on real files from major DCC tools
-- ✅ Handles common composition patterns
-- ❌ No full Pcp prim indexing parity
-- ❌ No UsdGeom/UsdShade typed APIs (yet)
+**Done:** USDA/USDC/USDZ parsing, sublayers, references, payloads, variants, inherits.
 
-If you need everything USD, use Pixar's native tools or a WASM build.
+**In progress:** Specializes, relocates, value clips, full Pcp prim indexing.
+
+**Planned:** Typed UsdGeom/UsdShade APIs, complete USDC write support.
+
+See [FEATURES.md](/FEATURES) for the full roadmap.
 
 <style>
 .ecosystem-cards {

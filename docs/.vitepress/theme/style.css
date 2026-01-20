@@ -1,0 +1,452 @@
+:root {
+  /* Cinevva brand tokens */
+  --cv-c-violet: #8b5cf6;
+  --cv-c-violet-2: #7c3aed;
+  --cv-c-cyan: #22d3ee;
+  --cv-c-cyan-2: #06b6d4;
+
+  /* Links */
+  --cv-c-link: #0284c7;
+  --cv-c-link-hover: #06b6d4;
+  --cv-c-link-visited: #6d28d9;
+
+  /* VitePress brand */
+  --vp-c-brand-1: var(--cv-c-violet);
+  --vp-c-brand-2: var(--cv-c-violet-2);
+  --vp-c-brand-3: #a78bfa;
+
+  /* Typography */
+  --vp-font-family-base:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    'Apple Color Emoji',
+    'Segoe UI Emoji';
+  --vp-font-family-mono:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    'Liberation Mono',
+    'Courier New',
+    monospace;
+
+  /* Light theme surfaces */
+  --vp-c-bg: #fbfbfe;
+  --vp-c-bg-alt: #f5f6ff;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #f0f1ff;
+
+  --vp-c-text-1: #0f172a;
+  --vp-c-text-2: #334155;
+  --vp-c-text-3: #64748b;
+
+  --vp-c-border: rgba(15, 23, 42, 0.14);
+  --vp-c-divider: rgba(15, 23, 42, 0.1);
+
+  --vp-code-block-bg: rgba(2, 6, 23, 0.04);
+  --vp-code-bg: rgba(2, 6, 23, 0.07);
+
+  --cv-bg-gradient:
+    radial-gradient(900px 600px at 18% 10%, rgba(139, 92, 246, 0.12), transparent 65%),
+    radial-gradient(900px 600px at 85% 0%, rgba(34, 211, 238, 0.1), transparent 60%),
+    radial-gradient(900px 700px at 85% 90%, rgba(124, 58, 237, 0.06), transparent 60%);
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --vp-c-bg: #070714;
+  --vp-c-bg-alt: #0b0b1c;
+  --vp-c-bg-elv: #0f0f27;
+  --vp-c-bg-soft: #121232;
+
+  --vp-c-text-1: rgba(255, 255, 255, 0.92);
+  --vp-c-text-2: rgba(255, 255, 255, 0.72);
+  --vp-c-text-3: rgba(255, 255, 255, 0.56);
+
+  --vp-c-border: rgba(255, 255, 255, 0.14);
+  --vp-c-divider: rgba(255, 255, 255, 0.1);
+
+  --vp-code-block-bg: rgba(0, 0, 0, 0.3);
+  --vp-code-bg: rgba(255, 255, 255, 0.08);
+
+  --cv-c-link: #7dd3fc;
+  --cv-c-link-hover: #22d3ee;
+  --cv-c-link-visited: #c4b5fd;
+
+  --cv-bg-gradient:
+    radial-gradient(900px 600px at 18% 10%, rgba(139, 92, 246, 0.22), transparent 65%),
+    radial-gradient(900px 600px at 85% 0%, rgba(34, 211, 238, 0.16), transparent 60%),
+    radial-gradient(900px 700px at 85% 90%, rgba(124, 58, 237, 0.12), transparent 60%);
+}
+
+/* Global page backdrop */
+body {
+  background-image: var(--cv-bg-gradient);
+  background-attachment: fixed;
+}
+
+/* Subtle texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 900px at 50% -10%, rgba(34, 211, 238, 0.08), transparent 55%),
+    radial-gradient(1200px 900px at 10% 0%, rgba(139, 92, 246, 0.08), transparent 50%),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 90px
+    );
+  opacity: 0.18;
+}
+
+html.dark body::before {
+  opacity: 0.12;
+  background:
+    radial-gradient(1200px 900px at 50% -10%, rgba(34, 211, 238, 0.12), transparent 55%),
+    radial-gradient(1200px 900px at 10% 0%, rgba(139, 92, 246, 0.12), transparent 50%),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.04) 0px,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 110px
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    background-attachment: scroll;
+  }
+}
+
+::selection {
+  background: rgba(139, 92, 246, 0.28);
+}
+
+/* Focus ring */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.9);
+  outline-offset: 3px;
+}
+
+/* Nav: glassy + crisp */
+.VPNavBar {
+  border-bottom: 1px solid var(--vp-c-divider) !important;
+  backdrop-filter: blur(16px);
+}
+
+.VPNavBar.has-sidebar {
+  backdrop-filter: blur(18px);
+}
+
+.VPNavBar .container {
+  max-width: 1180px;
+}
+
+.VPNavBarTitle {
+  margin-right: 32px;
+}
+
+.VPNavBarMenu {
+  overflow: visible;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.VPNavBarMenu .VPMenu {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.VPNavBarMenuGroup .VPMenu,
+.VPFlyout .VPMenu {
+  z-index: 100;
+}
+
+/* Home hero */
+.VPHomeHero .name {
+  background: linear-gradient(110deg, var(--cv-c-cyan), var(--vp-c-brand-1) 55%, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
+}
+
+.VPHomeHero .text {
+  letter-spacing: -0.01em;
+}
+
+.VPHomeHero .tagline {
+  max-width: 48rem;
+}
+
+/* Buttons */
+.VPButton.brand {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(120deg, var(--vp-c-brand-2), var(--vp-c-brand-1) 55%, var(--cv-c-cyan-2));
+  box-shadow:
+    0 14px 35px rgba(124, 58, 237, 0.18),
+    0 10px 20px rgba(34, 211, 238, 0.12);
+}
+
+.VPButton.brand:hover {
+  filter: saturate(1.06) brightness(1.02);
+  transform: translateY(-1px);
+}
+
+.VPButton.alt {
+  border-color: var(--vp-c-border);
+  background: color-mix(in srgb, var(--vp-c-bg-elv) 70%, transparent);
+}
+
+@supports not (color-mix(in srgb, #000 10%, #fff)) {
+  .VPButton.alt {
+    background: rgba(255, 255, 255, 0.6);
+  }
+  html.dark .VPButton.alt {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* Feature cards */
+.VPFeature {
+  border: 1px solid var(--vp-c-border);
+  background: color-mix(in srgb, var(--vp-c-bg-elv) 82%, transparent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 50px rgba(2, 6, 23, 0.08);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.VPFeature:hover {
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--vp-c-border));
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 70px rgba(2, 6, 23, 0.12);
+}
+
+/* Markdown links */
+.vp-doc a {
+  color: var(--cv-c-link);
+  font-weight: 550;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+.vp-doc a:visited {
+  color: var(--cv-c-link-visited);
+}
+
+.vp-doc a:hover {
+  color: var(--cv-c-link-hover);
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
+}
+
+.vp-doc a > code {
+  color: inherit;
+}
+
+/* Nav + sidebar links */
+.VPNavBar a:not(.VPButton),
+.VPSidebar a {
+  color: color-mix(in srgb, var(--vp-c-text-1) 82%, var(--cv-c-link));
+}
+
+.VPNavBar a:not(.VPButton):hover,
+.VPSidebar a:hover {
+  color: var(--cv-c-link-hover);
+}
+
+.VPNavBar a:not(.VPButton):visited,
+.VPSidebar a:visited {
+  color: color-mix(in srgb, var(--vp-c-text-1) 70%, var(--cv-c-link-visited));
+}
+
+.VPNavBar a:not(.VPButton):focus-visible,
+.VPSidebar a:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.01em;
+}
+
+.vp-doc code {
+  border-radius: 8px;
+}
+
+.vp-doc pre {
+  border: 1px solid var(--vp-c-border);
+}
+
+.vp-doc blockquote {
+  border-left-color: color-mix(in srgb, var(--vp-c-brand-1) 55%, var(--vp-c-border));
+}
+
+.custom-block {
+  border-radius: 14px;
+}
+
+/* Task lists */
+.vp-doc ul:has(> .task-list-item) {
+  list-style: none;
+  padding-left: 0;
+}
+
+.vp-doc .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+  margin: 4px 0;
+}
+
+.vp-doc .task-list-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  margin: 2px 0 0 0;
+  border: 2px solid var(--vp-c-border);
+  border-radius: 6px;
+  background: var(--vp-c-bg);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.vp-doc .task-list-checkbox:checked {
+  background: linear-gradient(135deg, var(--vp-c-brand-1), var(--vp-c-brand-2));
+  border-color: var(--vp-c-brand-2);
+}
+
+.vp-doc .task-list-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 6px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Nav bar element ordering */
+.VPNavBar .content-body {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.VPNavBarMenu {
+  order: 1;
+}
+
+.VPNavBarSearch {
+  order: 2;
+  padding-left: 16px;
+  padding-right: 8px;
+}
+
+.VPNavBarTranslations {
+  order: 3;
+}
+
+.VPSwitchAppearance,
+.VPNavBarAppearance {
+  order: 10;
+}
+
+.VPNavBarAppearance::before,
+.VPNavBarExtra::before {
+  display: none !important;
+}
+
+/* Theme toggle */
+.VPSwitchAppearance,
+.VPSwitchAppearance .VPSwitch,
+.VPSwitchAppearance .check {
+  width: 40px !important;
+  height: 40px !important;
+  overflow: visible !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.VPSwitchAppearance .check {
+  position: relative !important;
+  transform: none !important;
+  top: 0 !important;
+  left: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.VPSwitchAppearance .VPSwitch::before {
+  display: none !important;
+}
+
+.VPSwitchAppearance .sun,
+.VPSwitchAppearance .moon {
+  width: 18px !important;
+  height: 18px !important;
+  position: static !important;
+  transform: none !important;
+}
+
+/* Light mode: show moon icon */
+.VPSwitchAppearance .sun {
+  display: none !important;
+}
+
+.VPSwitchAppearance .moon {
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* Dark mode: show sun icon */
+html.dark .VPSwitchAppearance .sun {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+html.dark .VPSwitchAppearance .moon {
+  display: none !important;
+}

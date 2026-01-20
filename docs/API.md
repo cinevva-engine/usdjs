@@ -6,14 +6,14 @@ Complete API reference for `@cinevva/usdjs`.
 
 ## Table of Contents
 
-- [UsdStage](#usdstage)
-- [SdfLayer](#sdflayer)
-- [SdfPath](#sdfpath)
-- [Parsing Functions](#parsing-functions)
-- [Serialization Functions](#serialization-functions)
-- [Composition Functions](#composition-functions)
-- [Resolver Interface](#resolver-interface)
-- [Type Definitions](#type-definitions)
+[UsdStage](#usdstage) |
+[SdfLayer](#sdflayer) |
+[SdfPath](#sdfpath) |
+[Parsing Functions](#parsing-functions) |
+[Serialization Functions](#serialization-functions) |
+[Composition Functions](#composition-functions) |
+[Resolver Interface](#resolver-interface) |
+[Type Definitions](#type-definitions)
 
 ---
 
@@ -33,7 +33,7 @@ static openUSDA(src: string, identifier?: string): UsdStage
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `src` | `string` | — | USDA text content |
+| `src` | `string` | required | USDA text content |
 | `identifier` | `string` | `'<memory>'` | Layer identifier (typically filename) |
 
 **Example:**
@@ -53,7 +53,7 @@ static openUSDC(buffer: ArrayBuffer | Uint8Array, identifier?: string): UsdStage
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `buffer` | `ArrayBuffer \| Uint8Array` | — | Binary USDC data |
+| `buffer` | `ArrayBuffer \| Uint8Array` | required | Binary USDC data |
 | `identifier` | `string` | `'<memory>'` | Layer identifier |
 
 **Example:**
@@ -67,7 +67,7 @@ const stage = UsdStage.openUSDC(buffer, 'model.usdc');
 
 #### `UsdStage.openUSDZ(buffer, identifier?)`
 
-Open a USDZ (ZIP package) file. **Async**.
+Open a USDZ (ZIP package) file. This is async.
 
 ```typescript
 static async openUSDZ(buffer: ArrayBuffer | Uint8Array, identifier?: string): Promise<UsdStage>
@@ -75,7 +75,7 @@ static async openUSDZ(buffer: ArrayBuffer | Uint8Array, identifier?: string): Pr
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `buffer` | `ArrayBuffer \| Uint8Array` | — | USDZ file data |
+| `buffer` | `ArrayBuffer \| Uint8Array` | required | USDZ file data |
 | `identifier` | `string` | `'<memory>'` | Layer identifier |
 
 **Example:**
@@ -93,7 +93,7 @@ Auto-detect format (USDA text or USDC binary) and open.
 static open(data: string | ArrayBuffer | Uint8Array, identifier?: string): UsdStage
 ```
 
-> **Note:** For USDZ files, use `openUSDZ()` instead.
+For USDZ files, use `openUSDZ()` instead.
 
 **Example:**
 ```typescript
@@ -105,7 +105,7 @@ const stage = UsdStage.open(data, 'scene.usd');
 
 #### `UsdStage.openUSDAWithResolver(src, resolver, identifier?)`
 
-Open a USDA file and resolve sublayers. **Async**.
+Open a USDA file and resolve sublayers. This is async.
 
 ```typescript
 static async openUSDAWithResolver(
@@ -162,13 +162,9 @@ const prim = composed.getPrim(SdfPath.parse('/World'));
 
 #### `stage.composePrimIndexWithResolver(resolver)`
 
-Full composition with external arc expansion. **Async**.
+Full composition with external arc expansion. This is async.
 
-Resolves and expands:
-- References (`prepend references = @./file.usda@`)
-- Payloads (`prepend payload = @./file.usda@`)
-- Variants (`variants = { "lod" = "high" }`)
-- Inherits (`prepend inherits = </SomeClass>`)
+It resolves and expands references (`prepend references = @./file.usda@`), payloads (`prepend payload = @./file.usda@`), variants (`variants = { "lod" = "high" }`), and inherits (`prepend inherits = </SomeClass>`).
 
 ```typescript
 async composePrimIndexWithResolver(resolver: UsdResolver): Promise<SdfLayerLike>
@@ -336,7 +332,7 @@ const layer = parseUsdcToLayer(usdcBuffer, { identifier: 'scene.usdc' });
 
 ### `parseUsdzToLayer(buffer, options?)`
 
-Parse USDZ package to an SdfLayer. **Async**.
+Parse USDZ package to an SdfLayer. This is async.
 
 ```typescript
 async function parseUsdzToLayer(
@@ -392,13 +388,13 @@ const outputUsda = serializeLayerToUsda(layer);
 
 ### `serializeLayerToUsdc(layer)`
 
-Serialize an SdfLayer to USDC binary. **Minimal implementation**.
+Serialize an SdfLayer to USDC binary. This is a minimal implementation.
 
 ```typescript
 function serializeLayerToUsdc(layer: SdfLayer): Uint8Array
 ```
 
-> **Note:** The USDC writer covers common authoring cases but is not feature-complete.
+The USDC writer covers common authoring cases but isn't feature-complete.
 
 ---
 

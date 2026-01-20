@@ -1,24 +1,30 @@
-## Contributing
+# Contributing
 
 Thanks for taking the time to contribute.
 
-### What we’re trying to build
+## What We're Building
 
-`@cinevva/usdjs` is a **pure JS/TS** USD core with a **practical** scope. We optimize for:
+`@cinevva/usdjs` is a reference-quality OpenUSD implementation in pure TypeScript. We're working toward full spec correctness.
 
-- correctness on real corpora
-- deterministic behavior
-- small API surface and low dependency footprint
+Our priorities:
 
-We do *not* aim for full OpenUSD parity in one shot.
+**Correctness first.** We verify behavior against Pixar's C++ implementation. When there's ambiguity, we match OpenUSD.
 
-### Ground rules
+**Corpus-validated.** Real USD files from production pipelines drive what we implement and how we test.
 
-- **Be corpus-driven**: add or reference a real file that demonstrates the issue when possible.
-- **Keep changes tight**: prefer small, reviewable PRs.
-- **No silent behavior changes**: if a fix changes observable behavior, document it and add a test.
+**Incremental progress.** We'd rather have fewer features that work correctly than more features that work "mostly."
 
-### Development
+## Ground Rules
+
+**Be corpus-driven**: add or reference a real file that demonstrates the issue when possible.
+
+**Verify against Pixar**: when implementing or fixing behavior, cross-reference with OpenUSD source. Document the mapping in comments or parity notes.
+
+**Keep changes tight**: prefer small, reviewable PRs.
+
+**No silent behavior changes**: if a fix changes observable behavior, document it and add a test.
+
+## Development
 
 ```bash
 npm i
@@ -26,17 +32,20 @@ npm run typecheck
 npm run test
 ```
 
-### Tests
+## Tests
 
-- Unit tests: `npm run test`
-- Corpus tests: `npm run test:corpus` (may require external corpora)
-- Perf tests: `npm run perf`
+Unit tests: `npm run test`
 
-### Reporting gaps
+Corpus tests: `npm run test:corpus` (may require external corpora)
 
-If your USD file doesn’t load:
+Perf tests: `npm run perf`
 
-- Provide a minimal reproduction (or a link to a publicly licensed asset)
-- Include expected behavior (Pixar OpenUSD, usdcat output, or a viewer screenshot)
-- Include `usdjs` version and environment (Node/browser)
+## Reporting Gaps
 
+If your USD file doesn't load, provide:
+
+A minimal reproduction (or a link to a publicly licensed asset).
+
+Expected behavior (Pixar OpenUSD, usdcat output, or a viewer screenshot).
+
+`usdjs` version and environment (Node/browser).
