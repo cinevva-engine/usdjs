@@ -1,11 +1,32 @@
 {
     "name": "@cinevva/usdjs",
-    "version": "0.0.1",
-    "private": true,
+    "version": "0.1.0",
     "type": "module",
-    "description": "Browser-first USD core (USDA/USDC) + composition + adapters. Engine-agnostic.",
+    "description": "Pure TypeScript/JavaScript OpenUSD (USD) core: USDA/USDC/USDZ parsing, minimal composition, and utilities. Browser-first, engine-agnostic.",
     "license": "MIT",
+    "author": "Cinevva",
+    "homepage": "https://github.com/cinevva/usdjs#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/cinevva/usdjs.git"
+    },
+    "bugs": {
+        "url": "https://github.com/cinevva/usdjs/issues"
+    },
+    "keywords": [
+        "usd",
+        "openusd",
+        "usda",
+        "usdc",
+        "usdz",
+        "threejs",
+        "parser",
+        "composition",
+        "typescript"
+    ],
     "sideEffects": false,
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
@@ -15,7 +36,9 @@
     "files": [
         "dist",
         "src",
-        "README.md"
+        "docs",
+        "README.md",
+        "LICENSE"
     ],
     "scripts": {
         "build": "tsc -p tsconfig.json",
@@ -26,10 +49,14 @@
         "corpus:curate": "npm run build && node scripts/curate-corpus.mjs",
         "corpus:curate:ftlab": "npm run build && node scripts/curate-ftlab.mjs",
         "test:corpus": "npm run build && node --test test/corpus",
-        "test:all": "npm run test && npm run perf && npm run test:corpus"
+        "test:all": "npm run test && npm run perf && npm run test:corpus",
+        "prepublishOnly": "npm run build"
     },
     "devDependencies": {
         "unzipper": "^0.10.14",
         "typescript": "^5.9.3"
+    },
+    "publishConfig": {
+        "access": "public"
     }
 }

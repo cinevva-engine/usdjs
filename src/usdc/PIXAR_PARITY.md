@@ -1,6 +1,6 @@
 ### USDC parser Pixar parity notes
 
-This document maps `usdjs`’s USDC (`.usdc`) decoding to Pixar’s reference implementation in OpenUSD.
+This document maps `@cinevva/usdjs`’s USDC (`.usdc`) decoding to Pixar’s reference implementation in OpenUSD.
 
 #### Reference files (Pixar/OpenUSD)
 - **ValueRep / structural reader**: `pxr/usd/sdf/crateFile.h`, `pxr/usd/sdf/crateFile.cpp`
@@ -25,12 +25,12 @@ Pixar defines `Sdf_CrateFile::ValueRep` as a packed `uint64`:
 
 See `ValueRep` in `pxr/usd/sdf/crateFile.h`.
 
-In `usdjs`:
+In `@cinevva/usdjs`:
 - We extract `type` with \((rep >> 48) & 0xFF\)
 - We extract flags with \((rep >> 56) & 0xFF\), then interpret:
   - `0x80` array, `0x40` inlined, `0x20` compressed, `0x10` arrayEdit
 
-Implementation: `packages/usdjs/src/usdc/parser.ts` (`decodeValueRep`).
+Implementation: `src/usdc/parser.ts` (`decodeValueRep`).
 
 ---
 
@@ -38,7 +38,7 @@ Implementation: `packages/usdjs/src/usdc/parser.ts` (`decodeValueRep`).
 
 Pixar’s `crateDataTypes.h` defines the authoritative enum values (changing them breaks compatibility).
 
-`usdjs` mirrors these values in its internal `ValueType` enum (e.g. `TimeSamples=46`, `DoubleVector=48`).
+`@cinevva/usdjs` mirrors these values in its internal `ValueType` enum (e.g. `TimeSamples=46`, `DoubleVector=48`).
 
 ---
 
@@ -55,7 +55,7 @@ Pixar’s `CrateFile::_ReadStructuralSections()` reads:
 See `pxr/usd/sdf/crateFile.cpp` (`_ReadTokens`, `_ReadStrings`, `_ReadFields`, `_ReadFieldSets`,
 `_ReadCompressedPaths`, `_ReadSpecs`).
 
-In `usdjs`, these are handled in `packages/usdjs/src/usdc/parser.ts` via `readTokens/readStrings/readFields/readFieldSets/readPaths/readSpecs`.
+In `@cinevva/usdjs`, these are handled in `src/usdc/parser.ts` via `readTokens/readStrings/readFields/readFieldSets/readPaths/readSpecs`.
 
 ---
 
@@ -70,11 +70,11 @@ Pixar encodes `TimeSamples` as:
 
 See `CrateFile::_Reader::Read<TimeSamples>()` in `pxr/usd/sdf/crateFile.cpp`.
 
-In `usdjs`:
+In `@cinevva/usdjs`:
 - We decode this layout and materialize a `Map<number, SdfValue>` attached to `SdfPropertySpec.timeSamples`.
 - We intentionally match the *observable* USDA shape `usdcat` produces for stable comparisons.
 
-Implementation: `packages/usdjs/src/usdc/parser.ts` (`ValueType.TimeSamples` case + `addProperty` wiring).
+Implementation: `src/usdc/parser.ts` (`ValueType.TimeSamples` case + `addProperty` wiring).
 
 ---
 
@@ -86,7 +86,7 @@ Pixar supports compressed floating point arrays using:
 
 See `_ReadPossiblyCompressedArray()` specializations in `pxr/usd/sdf/crateFile.cpp`.
 
-In `usdjs`, we implement the same format for `float[]` and `double[]` and validate it against the external corpus.
+In `@cinevva/usdjs`, we implement the same format for `float[]` and `double[]` and validate it against the external corpus.
 
 ---
 
@@ -94,10 +94,4 @@ In `usdjs`, we implement the same format for `float[]` and `double[]` and valida
 
 - **ArrayEdits** (`ValueRep::IsArrayEdit`): not decoded as a first-class value yet.
 - Some `TypeEnum` cases not exercised by our corpus are not fully implemented (e.g. `Spline`, `Relocates`, etc.).
-
-
-
-
-
-
 
