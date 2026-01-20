@@ -69,6 +69,7 @@ export default defineConfig({
           { text: 'Architecture', link: '/ARCHITECTURE' },
           { text: 'Comparison', link: '/COMPARISON' },
           { text: 'Corpus & Licenses', link: '/CORPUS_AND_LICENSES' },
+          { text: 'Test Results', link: '/test-results' },
         ]
       }
     ],

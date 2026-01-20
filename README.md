@@ -1,5 +1,8 @@
 ## `@cinevva/usdjs`
 
+[![CI](https://github.com/cinevva-engine/usdjs/actions/workflows/ci.yml/badge.svg)](https://github.com/cinevva-engine/usdjs/actions/workflows/ci.yml)
+[![Docs](https://github.com/cinevva-engine/usdjs/actions/workflows/docs.yml/badge.svg)](https://cinevva-engine.github.io/usdjs/)
+
 A reference-quality OpenUSD implementation in pure TypeScript. We're building toward full spec correctness, verified against Pixar's source code.
 
 It parses and serializes USDA (text), USDC (binary crate), and USDZ (package) files. The composition engine handles sublayers, references, payloads, variants, and inherits. It runs in modern browsers and Node.js without native addons or WebAssembly.

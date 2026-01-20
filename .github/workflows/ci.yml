@@ -1,42 +1,35 @@
-name: Deploy Documentation
+name: CI
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+  pull_request:
+    branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
       - name: Install dependencies
         run: npm install
 
-      - name: Run tests and generate results
+      - name: Run type check
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test 2>&1 | tee test-output.txt
+
+      - name: Generate test results JSON
+        if: always()
         run: |
-          npm test 2>&1 | tee test-output.txt || true
           node -e "
           const fs = require('fs');
           const output = fs.readFileSync('test-output.txt', 'utf8');
@@ -57,25 +50,13 @@ jobs:
             success: failMatch ? parseInt(failMatch[1]) === 0 : true
           };
           
-          fs.writeFileSync('docs/public/test-results.json', JSON.stringify(results, null, 2));
+          fs.writeFileSync('test-results.json', JSON.stringify(results, null, 2));
           console.log('Test results:', results);
           "
 
-      - name: Build documentation
-        run: npm run docs:build
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: docs/.vitepress/dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: test-results
+          path: test-results.json

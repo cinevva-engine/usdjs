@@ -5,7 +5,7 @@ import { UsdStage, resolveAssetPath } from '../../dist/index.js';
 
 test(
   'teapotScene.usd: composition loads referenced assets (bounded reads, no <composed> resolution)',
-  { timeout: 20000 },
+  { timeout: 20000, skip: 'Requires corpus assets (npm run corpus:fetch)' },
   async () => {
     const entry =
       'test/corpus/external/usd-wg-assets/assets-main/intent-vfx/scenes/teapotScene.usd';
