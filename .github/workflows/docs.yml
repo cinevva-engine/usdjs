@@ -41,10 +41,10 @@ jobs:
           const fs = require('fs');
           const output = fs.readFileSync('test-output.txt', 'utf8');
           
-          const passMatch = output.match(/ℹ pass (\d+)/);
-          const failMatch = output.match(/ℹ fail (\d+)/);
-          const skipMatch = output.match(/ℹ skipped (\d+)/);
-          const durationMatch = output.match(/ℹ duration_ms ([\d.]+)/);
+          const passMatch = output.match(/# pass (\d+)/);
+          const failMatch = output.match(/# fail (\d+)/);
+          const skipMatch = output.match(/# skipped (\d+)/);
+          const durationMatch = output.match(/# duration_ms ([\d.]+)/);
           
           const results = {
             timestamp: new Date().toISOString(),
