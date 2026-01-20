@@ -1,6 +1,26 @@
 import { defineConfig } from 'vitepress'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  vite: {
+    resolve: {
+      alias: {
+        '@cinevva/usdjs-viewer': path.resolve(__dirname, '../../../cinevva-usdjs-viewer/src'),
+        '@cinevva/usdjs': path.resolve(__dirname, '../../src'),
+        'three': path.resolve(__dirname, '../../../cinevva-usdjs-viewer/node_modules/three'),
+        'three-subdivide': path.resolve(__dirname, '../../../cinevva-usdjs-viewer/node_modules/three-subdivide'),
+      }
+    },
+    optimizeDeps: {
+      include: ['three', 'vue']
+    },
+    ssr: {
+      noExternal: ['three', 'three-subdivide']
+    }
+  },
   title: '@cinevva/usdjs',
   description: 'Pure TypeScript/JavaScript OpenUSD implementation',
   
@@ -28,7 +48,7 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/QUICKSTART' },
       { text: 'API', link: '/API' },
-      { text: 'Examples', link: '/EXAMPLES' },
+      { text: 'Playground', link: '/playground' },
       {
         text: 'Ecosystem',
         items: [
@@ -45,6 +65,7 @@ export default defineConfig({
         items: [
           { text: 'What is usdjs?', link: '/' },
           { text: 'Quick Start', link: '/QUICKSTART' },
+          { text: 'Playground', link: '/playground' },
           { text: 'Features', link: '/FEATURES' },
         ]
       },
